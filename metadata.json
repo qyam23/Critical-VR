@@ -1,0 +1,5 @@
+{
+  "name": "Quest Motion Trip Simulator",
+  "description": "A simulator and asset generator for a Meta Quest XR experience that reacts to head motion.",
+  "requestFramePermissions": ["camera"]
+}
