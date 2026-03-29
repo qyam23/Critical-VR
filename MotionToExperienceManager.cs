@@ -31,8 +31,8 @@ public class MotionToExperienceManager : MonoBehaviour
     [SerializeField, Range(0.05f, 3f)] private float sensitivity = 1f;
     [SerializeField, Range(0.05f, 4f)] private float decayRate = 1.25f;
     [SerializeField, Range(4, 32)] private int movingAverageSamples = 12;
-    [SerializeField, Range(0.1f, 1f)] private float enterThreshold = 0.18f;
-    [SerializeField, Range(0.01f, 0.5f)] private float exitThreshold = 0.08f;
+    [SerializeField, Range(0.1f, 1f)] private float enterThreshold = 0.15f;
+    [SerializeField, Range(0.01f, 0.5f)] private float exitThreshold = 0.06f;
 
     [Header("Transitions")]
     [SerializeField, Min(1.5f)] private float fadeDuration = 1.5f;
@@ -58,6 +58,8 @@ public class MotionToExperienceManager : MonoBehaviour
     private float _edgeGlow;
     private float _chromaticLayer;
     private float _distortionLayer;
+    private float _overdriveLayer;
+    private float _overdriveHold;
     private ExperienceState _currentState = ExperienceState.Calm;
     private bool _experienceActive;
     private bool _isResetting;
@@ -147,10 +149,23 @@ public class MotionToExperienceManager : MonoBehaviour
 
         if (_experienceActive)
         {
-            _intensityScore += _smoothedMotion * sensitivity * dt;
+            float gain = _intensityScore > 0.72f ? 0.5f : 1f;
+            _intensityScore += _smoothedMotion * sensitivity * gain * dt;
         }
 
-        _intensityScore *= Mathf.Exp(-decayRate * dt);
+        float releaseMultiplier = (_intensityScore > 0.7f || _overdriveHold > 0f) ? 0.28f : 0.65f;
+        _intensityScore *= Mathf.Exp(-(decayRate * releaseMultiplier) * dt);
+
+        if (_intensityScore >= 0.78f)
+        {
+            _overdriveHold = 4.5f;
+        }
+        else if (_overdriveHold > 0f)
+        {
+            _overdriveHold = Mathf.Max(0f, _overdriveHold - dt);
+            _intensityScore = Mathf.Max(_intensityScore, 0.8f);
+        }
+
         _intensityScore = Mathf.Clamp01(_intensityScore);
     }
 
@@ -159,7 +174,7 @@ public class MotionToExperienceManager : MonoBehaviour
         float trend = (_intensityScore - _lastIntensityScore) / Mathf.Max(dt, 0.0001f);
         _lastIntensityScore = _intensityScore;
 
-        if (_intensityScore < 0.12f)
+        if (_intensityScore < 0.08f)
         {
             _currentState = ExperienceState.Calm;
         }
@@ -167,7 +182,7 @@ public class MotionToExperienceManager : MonoBehaviour
         {
             _currentState = ExperienceState.Recovery;
         }
-        else if (_intensityScore < 0.45f)
+        else if (_intensityScore < 0.3f)
         {
             _currentState = ExperienceState.Shift;
         }
@@ -179,13 +194,23 @@ public class MotionToExperienceManager : MonoBehaviour
 
     private void UpdateLayers(float dt)
     {
-        float edgeTarget = Mathf.SmoothStep(0f, 1f, _intensityScore);
-        float chromaticTarget = Mathf.SmoothStep(0f, 1f, Mathf.Max(0f, (_intensityScore - 0.18f) / 0.82f));
-        float distortionTarget = Mathf.SmoothStep(0f, 1f, Mathf.Max(0f, (_intensityScore - 0.38f) / 0.62f));
+        float edgeTarget = Mathf.Clamp01(Mathf.Pow(_intensityScore, 0.78f));
+        float chromaticTarget = Mathf.SmoothStep(0f, 1f, Mathf.Max(0f, (_intensityScore - 0.08f) / 0.92f));
+        float distortionTarget = Mathf.SmoothStep(0f, 1f, Mathf.Max(0f, (_intensityScore - 0.22f) / 0.78f));
+        float overdriveTarget = (_intensityScore >= 0.75f || _overdriveHold > 0f)
+            ? Mathf.Clamp01((Mathf.Max(_intensityScore, 0.8f) - 0.75f) / 0.25f)
+            : 0f;
 
-        _edgeGlow = Mathf.Lerp(_edgeGlow, edgeTarget, 1f - Mathf.Exp(-3.5f * dt));
-        _chromaticLayer = Mathf.Lerp(_chromaticLayer, chromaticTarget, 1f - Mathf.Exp(-2.75f * dt));
-        _distortionLayer = Mathf.Lerp(_distortionLayer, distortionTarget, 1f - Mathf.Exp(-2.25f * dt));
+        _edgeGlow = SmoothLayer(_edgeGlow, edgeTarget, 2.2f, 0.42f, dt);
+        _chromaticLayer = SmoothLayer(_chromaticLayer, chromaticTarget, 1.8f, 0.34f, dt);
+        _distortionLayer = SmoothLayer(_distortionLayer, distortionTarget, 1.2f, 0.28f, dt);
+        _overdriveLayer = SmoothLayer(_overdriveLayer, overdriveTarget, 1.1f, 0.16f, dt);
+    }
+
+    private float SmoothLayer(float current, float target, float attack, float release, float dt)
+    {
+        float speed = target > current ? attack : release;
+        return Mathf.Lerp(current, target, 1f - Mathf.Exp(-speed * dt));
     }
 
     private void ApplyMaterialProperties()
@@ -201,11 +226,12 @@ public class MotionToExperienceManager : MonoBehaviour
         effectMaterial.SetFloat("_ChromaticAmount", _chromaticLayer * maxChromaticAmount);
         effectMaterial.SetFloat("_DistortionAmount", _distortionLayer * maxDistortionUv);
         effectMaterial.SetFloat("_PeripheralBlur", _chromaticLayer * maxPeripheralBlur);
+        effectMaterial.SetFloat("_OverdriveAmount", _overdriveLayer);
 
         Color edgeColor = Color.Lerp(
             new Color(0.45f, 0.9f, 1f, 1f),
             new Color(1f, 0.35f, 0.85f, 1f),
-            _intensityScore);
+            Mathf.Clamp01(_intensityScore * 1.2f));
         effectMaterial.SetColor("_EdgeColor", edgeColor);
         effectMaterial.SetFloat("_StateIndex", (float)_currentState);
     }
@@ -249,6 +275,7 @@ public class MotionToExperienceManager : MonoBehaviour
         float startEdge = _edgeGlow;
         float startChromatic = _chromaticLayer;
         float startDistortion = _distortionLayer;
+        float startOverdrive = _overdriveLayer;
         float elapsed = 0f;
 
         while (elapsed < fadeDuration)
@@ -260,6 +287,7 @@ public class MotionToExperienceManager : MonoBehaviour
             _edgeGlow = Mathf.Lerp(startEdge, 0f, t);
             _chromaticLayer = Mathf.Lerp(startChromatic, 0f, t);
             _distortionLayer = Mathf.Lerp(startDistortion, 0f, t);
+            _overdriveLayer = Mathf.Lerp(startOverdrive, 0f, t);
 
             ApplyMaterialProperties();
             yield return null;
@@ -273,6 +301,8 @@ public class MotionToExperienceManager : MonoBehaviour
         _edgeGlow = 0f;
         _chromaticLayer = 0f;
         _distortionLayer = 0f;
+        _overdriveLayer = 0f;
+        _overdriveHold = 0f;
         _experienceActive = false;
         _isResetting = false;
         _currentState = ExperienceState.Calm;

@@ -27,6 +27,7 @@ type LayerState = {
   chromatic: number;
   blur: number;
   distortion: number;
+  overdrive: number;
 };
 
 type UiSnapshot = {
@@ -62,6 +63,7 @@ type SimulationState = {
   breathingScale: number;
   trailIntensity: number;
   trend: number;
+  overdriveHold: number;
   layers: LayerState;
   motionSamples: number[];
 };
@@ -73,8 +75,8 @@ declare global {
   }
 }
 
-const ENTER_THRESHOLD = 0.18;
-const EXIT_THRESHOLD = 0.08;
+const ENTER_THRESHOLD = 0.15;
+const EXIT_THRESHOLD = 0.06;
 const RESET_DURATION = 1.5;
 const DISTORTION_CAP = 0.05;
 const initialLayers: LayerState = {
@@ -82,6 +84,7 @@ const initialLayers: LayerState = {
   chromatic: 0,
   blur: 0,
   distortion: 0,
+  overdrive: 0,
 };
 
 const initialUiSnapshot: UiSnapshot = {
@@ -105,14 +108,18 @@ function expLerp(current: number, target: number, speed: number, dt: number) {
   return current + (target - current) * (1 - Math.exp(-speed * dt));
 }
 
+function approachLayer(current: number, target: number, attack: number, release: number, dt: number) {
+  return expLerp(current, target, target > current ? attack : release, dt);
+}
+
 function getState(score: number, trend: number): ExperienceState {
-  if (score < 0.12) {
+  if (score < 0.08) {
     return 'Calm';
   }
   if (trend < -0.2 && score > 0.2) {
     return 'Recovery';
   }
-  if (score < 0.45) {
+  if (score < 0.3) {
     return 'Shift';
   }
   return 'Intense';
@@ -123,7 +130,7 @@ export default function App() {
   const [showGuide, setShowGuide] = useState(false);
   const [useCamera, setUseCamera] = useState(false);
   const [useDebugSlider, setUseDebugSlider] = useState(true);
-  const [debugIntensity, setDebugIntensity] = useState(0.22);
+  const [debugIntensity, setDebugIntensity] = useState(0.48);
   const [sensitivity, setSensitivity] = useState(1);
   const [decayRate, setDecayRate] = useState(1.25);
   const [ui, setUi] = useState<UiSnapshot>(initialUiSnapshot);
@@ -166,6 +173,7 @@ export default function App() {
     breathingScale: 1,
     trailIntensity: 0,
     trend: 0,
+    overdriveHold: 0,
     layers: { ...initialLayers },
     motionSamples: [],
   });
@@ -268,6 +276,7 @@ export default function App() {
       sim.layers.chromatic = sim.resetFrom.layers.chromatic * (1 - t);
       sim.layers.blur = sim.resetFrom.layers.blur * (1 - t);
       sim.layers.distortion = sim.resetFrom.layers.distortion * (1 - t);
+      sim.layers.overdrive = sim.resetFrom.layers.overdrive * (1 - t);
       sim.trend = (sim.intensityScore - previousScore) / Math.max(dt, 1 / 240);
       sim.state = 'Recovery';
       sim.isActive = sim.intensityScore > EXIT_THRESHOLD;
@@ -285,6 +294,7 @@ export default function App() {
         sim.trailIntensity = 0;
         sim.layers = { ...initialLayers };
         sim.motionSamples = [];
+        sim.overdriveHold = 0;
       }
 
       syncUi();
@@ -310,32 +320,45 @@ export default function App() {
     }
 
     if (params.useDebugSlider) {
-      sim.intensityScore = expLerp(sim.intensityScore, params.debugIntensity, 2.2, dt);
+      sim.intensityScore = expLerp(sim.intensityScore, params.debugIntensity, 3.5, dt);
     } else {
       if (sim.isActive) {
-        sim.intensityScore += sim.smoothedMotion * params.sensitivity * 0.95 * dt;
+        const gain = sim.intensityScore > 0.72 ? 0.5 : 0.95;
+        sim.intensityScore += sim.smoothedMotion * params.sensitivity * gain * dt;
       }
-      sim.intensityScore *= Math.exp(-params.decayRate * dt);
+      const releaseMultiplier = sim.intensityScore > 0.7 || sim.overdriveHold > 0 ? 0.28 : 0.65;
+      sim.intensityScore *= Math.exp(-(params.decayRate * releaseMultiplier) * dt);
+    }
+
+    if (sim.intensityScore >= 0.78) {
+      sim.overdriveHold = 4.5;
+    } else if (sim.overdriveHold > 0) {
+      sim.overdriveHold = Math.max(0, sim.overdriveHold - dt);
+      sim.intensityScore = Math.max(sim.intensityScore, 0.8);
     }
 
     sim.intensityScore = clamp01(sim.intensityScore);
     sim.trend = (sim.intensityScore - previousScore) / Math.max(dt, 1 / 240);
     sim.state = getState(sim.intensityScore, sim.trend);
 
-    const chromaticTarget = clamp01((sim.intensityScore - 0.18) / 0.82);
-    const blurTarget = clamp01((sim.intensityScore - 0.12) / 0.88);
-    const distortionTarget = clamp01((sim.intensityScore - 0.42) / 0.58);
-    const edgeTarget = clamp01(sim.intensityScore);
+    const chromaticTarget = clamp01((sim.intensityScore - 0.08) / 0.92);
+    const blurTarget = clamp01((sim.intensityScore - 0.04) / 0.96);
+    const distortionTarget = clamp01((sim.intensityScore - 0.22) / 0.78);
+    const edgeTarget = clamp01(Math.pow(sim.intensityScore, 0.78));
+    const overdriveTarget = sim.intensityScore >= 0.75 || sim.overdriveHold > 0
+      ? clamp01((Math.max(sim.intensityScore, 0.8) - 0.75) / 0.25)
+      : 0;
 
-    sim.layers.edge = expLerp(sim.layers.edge, edgeTarget, 4.2, dt);
-    sim.layers.chromatic = expLerp(sim.layers.chromatic, chromaticTarget, 3.2, dt);
-    sim.layers.blur = expLerp(sim.layers.blur, blurTarget, 2.6, dt);
-    sim.layers.distortion = expLerp(sim.layers.distortion, distortionTarget, 2.1, dt);
+    sim.layers.edge = approachLayer(sim.layers.edge, edgeTarget, 2.2, 0.42, dt);
+    sim.layers.chromatic = approachLayer(sim.layers.chromatic, chromaticTarget, 1.8, 0.34, dt);
+    sim.layers.blur = approachLayer(sim.layers.blur, blurTarget, 1.5, 0.3, dt);
+    sim.layers.distortion = approachLayer(sim.layers.distortion, distortionTarget, 1.2, 0.28, dt);
+    sim.layers.overdrive = approachLayer(sim.layers.overdrive, overdriveTarget, 1.1, 0.16, dt);
 
     sim.breathingPhase += dt * (params.mode === 'Psychedelic' ? 1.4 + sim.intensityScore * 1.8 : 0.9 + sim.intensityScore);
-    sim.breathingScale = 1 + Math.sin(sim.breathingPhase) * 0.015 * (0.2 + sim.layers.blur);
+    sim.breathingScale = 1 + Math.sin(sim.breathingPhase) * (0.015 + sim.layers.overdrive * 0.02) * (0.2 + sim.layers.blur);
 
-    sim.trailIntensity = Math.max(sim.trailIntensity * Math.exp(-4 * dt), motionSignal > 0.65 ? 0.9 : 0);
+    sim.trailIntensity = Math.max(sim.trailIntensity * Math.exp(-2.2 * dt), motionSignal > 0.65 ? 0.95 : sim.layers.overdrive * 0.55);
     sim.pendingMotion *= Math.exp(-7 * dt);
     sim.linearAcceleration *= Math.exp(-7.5 * dt);
     sim.angularVelocity *= Math.exp(-7.5 * dt);
@@ -379,6 +402,7 @@ export default function App() {
           chromatic: Number(simRef.current.layers.chromatic.toFixed(3)),
           blur: Number(simRef.current.layers.blur.toFixed(3)),
           distortion: Number(simRef.current.layers.distortion.toFixed(3)),
+          overdrive: Number(simRef.current.layers.overdrive.toFixed(3)),
         },
         controls: {
           reset: ['Space', 'B', 'Y'],
@@ -436,13 +460,14 @@ export default function App() {
 
   const filterStyles = {
     filter: `
-      saturate(${100 + ui.layers.edge * (mode === 'Psychedelic' ? 90 : 35)}%)
-      contrast(${100 + ui.layers.edge * (mode === 'Psychedelic' ? 45 : 22)}%)
-      hue-rotate(${ui.layers.chromatic * (mode === 'Psychedelic' ? 96 : 18)}deg)
-      blur(${ui.layers.blur * 1.25}px)
+      saturate(${100 + ui.layers.edge * (mode === 'Psychedelic' ? 145 : 55)}%)
+      contrast(${100 + ui.layers.edge * (mode === 'Psychedelic' ? 78 : 34)}%)
+      brightness(${100 + ui.layers.blur * (mode === 'Psychedelic' ? 18 : 10) + ui.layers.overdrive * 20}%)
+      hue-rotate(${ui.layers.chromatic * (mode === 'Psychedelic' ? 145 : 28) + ui.layers.overdrive * 120}deg)
+      blur(${ui.layers.blur * 2.1 + ui.layers.overdrive * 1.8}px)
       url(#tripDistortion)
     `,
-    transform: `scale(${ui.breathingScale + ui.layers.distortion * 0.025})`,
+    transform: `scale(${ui.breathingScale + ui.layers.distortion * 0.04 + ui.layers.overdrive * 0.02})`,
   };
 
   const backgroundTint =
@@ -452,8 +477,8 @@ export default function App() {
 
   const edgeTint =
     mode === 'Psychedelic'
-      ? `rgba(232, 121, 249, ${0.15 + ui.layers.edge * 0.65})`
-      : `rgba(251, 191, 36, ${0.12 + ui.layers.edge * 0.45})`;
+      ? `rgba(232, 121, 249, ${0.25 + ui.layers.edge * 0.75})`
+      : `rgba(251, 191, 36, ${0.18 + ui.layers.edge * 0.55})`;
 
   return (
     <div className="min-h-screen overflow-hidden bg-black text-white selection:bg-fuchsia-500/20">
@@ -464,7 +489,7 @@ export default function App() {
           </feTurbulence>
           <feDisplacementMap
             in="SourceGraphic"
-            scale={ui.layers.distortion * DISTORTION_CAP * 700}
+            scale={ui.layers.distortion * DISTORTION_CAP * 1000}
             xChannelSelector="R"
             yChannelSelector="G"
           />
@@ -494,36 +519,66 @@ export default function App() {
           )}
         </div>
 
-        {ui.trailIntensity > 0.08 && (
+        {ui.trailIntensity > 0.05 && (
           <div
-            className="absolute inset-0 mix-blend-screen opacity-20"
+            className="absolute inset-0 mix-blend-screen opacity-30"
             style={{
-              transform: `translate(${ui.trailIntensity * 14}px, ${ui.trailIntensity * 8}px) scale(${1 + ui.trailIntensity * 0.01})`,
+              transform: `translate(${ui.trailIntensity * 22}px, ${ui.trailIntensity * 12}px) scale(${1 + ui.trailIntensity * 0.02})`,
               background:
                 mode === 'Psychedelic'
-                  ? 'radial-gradient(circle at 40% 30%, rgba(236,72,153,0.24), transparent 35%), radial-gradient(circle at 70% 60%, rgba(59,130,246,0.16), transparent 35%)'
-                  : 'radial-gradient(circle at 40% 30%, rgba(251,191,36,0.18), transparent 35%), radial-gradient(circle at 70% 60%, rgba(45,212,191,0.12), transparent 35%)',
+                  ? 'radial-gradient(circle at 40% 30%, rgba(236,72,153,0.34), transparent 35%), radial-gradient(circle at 70% 60%, rgba(59,130,246,0.26), transparent 35%)'
+                  : 'radial-gradient(circle at 40% 30%, rgba(251,191,36,0.24), transparent 35%), radial-gradient(circle at 70% 60%, rgba(45,212,191,0.18), transparent 35%)',
             }}
           />
         )}
 
         <div
+          className="absolute inset-0 mix-blend-screen transition-opacity duration-500"
+          style={{
+            opacity: mode === 'Psychedelic' ? ui.layers.edge * 0.22 + ui.layers.overdrive * 0.18 : ui.layers.edge * 0.12 + ui.layers.overdrive * 0.1,
+            background:
+              mode === 'Psychedelic'
+                ? 'radial-gradient(circle at 20% 20%, rgba(217,70,239,0.55), transparent 30%), radial-gradient(circle at 80% 70%, rgba(56,189,248,0.45), transparent 32%)'
+                : 'radial-gradient(circle at 20% 20%, rgba(251,191,36,0.35), transparent 30%), radial-gradient(circle at 80% 70%, rgba(45,212,191,0.22), transparent 32%)',
+          }}
+        />
+
+        <div
+          className="absolute inset-0 mix-blend-screen transition-opacity duration-700"
+          style={{
+            opacity: ui.layers.overdrive * 0.58,
+            background:
+              'radial-gradient(circle at 18% 22%, rgba(255,0,128,0.9), transparent 22%), radial-gradient(circle at 78% 28%, rgba(0,255,255,0.72), transparent 24%), radial-gradient(circle at 52% 78%, rgba(255,255,0,0.62), transparent 28%)',
+          }}
+        />
+
+        <div
+          className="absolute inset-0 transition-opacity duration-700"
+          style={{
+            opacity: ui.layers.overdrive * 0.36,
+            background:
+              'linear-gradient(135deg, rgba(255,0,106,0.45), rgba(102,0,255,0.18) 35%, rgba(0,255,224,0.28) 70%, rgba(255,153,0,0.35))',
+            mixBlendMode: 'color-dodge',
+          }}
+        />
+
+        <div
           className="absolute inset-0 transition-[box-shadow,border] duration-500"
           style={{
-            boxShadow: `inset 0 0 ${40 + ui.layers.edge * 140}px ${edgeTint}`,
-            border: `${ui.layers.edge * 10}px solid ${edgeTint}`,
+            boxShadow: `inset 0 0 ${40 + ui.layers.edge * 140 + ui.layers.overdrive * 180}px ${edgeTint}`,
+            border: `${ui.layers.edge * 14 + ui.layers.overdrive * 10}px solid ${edgeTint}`,
           }}
         />
 
         {ui.layers.chromatic > 0.08 && (
           <div className="absolute inset-0 overflow-hidden mix-blend-screen">
             <div
-              className="absolute inset-0 bg-red-500/15"
-              style={{ transform: `translateX(${ui.layers.chromatic * 10}px)` }}
+              className="absolute inset-0 bg-red-500/20"
+              style={{ transform: `translateX(${ui.layers.chromatic * 18 + ui.layers.overdrive * 24}px) scale(${1.01 + ui.layers.overdrive * 0.02})` }}
             />
             <div
-              className="absolute inset-0 bg-cyan-400/15"
-              style={{ transform: `translateX(-${ui.layers.chromatic * 10}px)` }}
+              className="absolute inset-0 bg-cyan-400/20"
+              style={{ transform: `translateX(-${ui.layers.chromatic * 18 + ui.layers.overdrive * 24}px) scale(${1.01 + ui.layers.overdrive * 0.02})` }}
             />
           </div>
         )}
@@ -619,6 +674,9 @@ export default function App() {
                   onChange={event => setDebugIntensity(Number(event.target.value))}
                   className="w-full"
                 />
+                <div className="mt-2 text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                  Debug mode overrides live sensitivity and drives the score directly.
+                </div>
               </div>
             </div>
 
@@ -699,6 +757,10 @@ export default function App() {
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <div className="mb-1 text-[11px] uppercase tracking-[0.18em] text-zinc-500">Distortion</div>
                 <div className="text-lg text-white">{(ui.layers.distortion * DISTORTION_CAP).toFixed(3)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="mb-1 text-[11px] uppercase tracking-[0.18em] text-zinc-500">Overdrive</div>
+                <div className="text-lg text-white">{(ui.layers.overdrive * 100).toFixed(0)}%</div>
               </div>
             </div>
           </section>
