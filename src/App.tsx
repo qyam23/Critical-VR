@@ -1,567 +1,785 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  Activity, 
-  Zap, 
-  Shield, 
-  RefreshCw, 
+import React, {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from 'react';
+import {
+  Activity,
+  AlertCircle,
   Camera as CameraIcon,
-  Settings,
   Info,
-  AlertCircle
+  RefreshCw,
+  Settings,
+  Shield,
+  SlidersHorizontal,
+  Waves,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 
-// --- Types ---
 type ExperienceState = 'Calm' | 'Shift' | 'Intense' | 'Recovery';
+type ExperienceMode = 'Psychedelic' | 'Empathic';
+
+type LayerState = {
+  edge: number;
+  chromatic: number;
+  blur: number;
+  distortion: number;
+};
+
+type UiSnapshot = {
+  intensityScore: number;
+  state: ExperienceState;
+  isActive: boolean;
+  linearAcceleration: number;
+  angularVelocity: number;
+  smoothedMotion: number;
+  trend: number;
+  breathingScale: number;
+  trailIntensity: number;
+  layers: LayerState;
+};
+
+type SimulationState = {
+  intensityScore: number;
+  state: ExperienceState;
+  isActive: boolean;
+  isResetting: boolean;
+  resetElapsed: number;
+  resetFrom: UiSnapshot;
+  lastMoveTs: number;
+  lastPointerX: number;
+  lastPointerY: number;
+  lastVelocity: number;
+  lastHeading: number | null;
+  linearAcceleration: number;
+  angularVelocity: number;
+  pendingMotion: number;
+  smoothedMotion: number;
+  breathingPhase: number;
+  breathingScale: number;
+  trailIntensity: number;
+  trend: number;
+  layers: LayerState;
+  motionSamples: number[];
+};
+
+declare global {
+  interface Window {
+    render_game_to_text?: () => string;
+    advanceTime?: (ms: number) => void;
+  }
+}
+
+const ENTER_THRESHOLD = 0.18;
+const EXIT_THRESHOLD = 0.08;
+const RESET_DURATION = 1.5;
+const DISTORTION_CAP = 0.05;
+const initialLayers: LayerState = {
+  edge: 0,
+  chromatic: 0,
+  blur: 0,
+  distortion: 0,
+};
+
+const initialUiSnapshot: UiSnapshot = {
+  intensityScore: 0,
+  state: 'Calm',
+  isActive: false,
+  linearAcceleration: 0,
+  angularVelocity: 0,
+  smoothedMotion: 0,
+  trend: 0,
+  breathingScale: 1,
+  trailIntensity: 0,
+  layers: initialLayers,
+};
+
+function clamp01(value: number) {
+  return Math.min(Math.max(value, 0), 1);
+}
+
+function expLerp(current: number, target: number, speed: number, dt: number) {
+  return current + (target - current) * (1 - Math.exp(-speed * dt));
+}
+
+function getState(score: number, trend: number): ExperienceState {
+  if (score < 0.12) {
+    return 'Calm';
+  }
+  if (trend < -0.2 && score > 0.2) {
+    return 'Recovery';
+  }
+  if (score < 0.45) {
+    return 'Shift';
+  }
+  return 'Intense';
+}
 
 export default function App() {
-  // --- State ---
-  const [intensityScore, setIntensityScore] = useState(0);
-  const [state, setState] = useState<ExperienceState>('Calm');
-  const [mode, setMode] = useState<'Psychedelic' | 'Empathic'>('Psychedelic');
-  const [isExperienceActive, setIsExperienceActive] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-  const [useCamera, setUseCamera] = useState(false);
-  const [sensitivity, setSensitivity] = useState(0.8);
-  const [decayRate, setDecayRate] = useState(1.2);
+  const [mode, setMode] = useState<ExperienceMode>('Psychedelic');
   const [showGuide, setShowGuide] = useState(false);
+  const [useCamera, setUseCamera] = useState(false);
+  const [useDebugSlider, setUseDebugSlider] = useState(true);
+  const [debugIntensity, setDebugIntensity] = useState(0.22);
+  const [sensitivity, setSensitivity] = useState(1);
+  const [decayRate, setDecayRate] = useState(1.25);
+  const [ui, setUi] = useState<UiSnapshot>(initialUiSnapshot);
+  const deferredScore = useDeferredValue(ui.intensityScore);
 
-  // --- Refs for Motion Calculation ---
-  const lastMousePos = useRef({ x: 0, y: 0 });
-  const lastTime = useRef(Date.now());
-  const velocity = useRef(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const paramsRef = useRef({
+    mode,
+    useDebugSlider,
+    debugIntensity,
+    sensitivity,
+    decayRate,
+  });
+  paramsRef.current = {
+    mode,
+    useDebugSlider,
+    debugIntensity,
+    sensitivity,
+    decayRate,
+  };
 
-  // --- Reset Logic ---
-  const resetExperience = useCallback(() => {
-    setIsResetting(true);
-    const startScore = intensityScore;
-    const duration = 1500;
-    const startTime = Date.now();
+  const simRef = useRef<SimulationState>({
+    intensityScore: 0,
+    state: 'Calm',
+    isActive: false,
+    isResetting: false,
+    resetElapsed: 0,
+    resetFrom: initialUiSnapshot,
+    lastMoveTs: performance.now(),
+    lastPointerX: 0,
+    lastPointerY: 0,
+    lastVelocity: 0,
+    lastHeading: null,
+    linearAcceleration: 0,
+    angularVelocity: 0,
+    pendingMotion: 0,
+    smoothedMotion: 0,
+    breathingPhase: 0,
+    breathingScale: 1,
+    trailIntensity: 0,
+    trend: 0,
+    layers: { ...initialLayers },
+    motionSamples: [],
+  });
 
-    const fade = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const current = startScore * (1 - progress);
-      
-      setIntensityScore(current);
+  const syncUi = useEffectEvent(() => {
+    const sim = simRef.current;
+    startTransition(() => {
+      setUi({
+        intensityScore: sim.intensityScore,
+        state: sim.state,
+        isActive: sim.isActive,
+        linearAcceleration: sim.linearAcceleration,
+        angularVelocity: sim.angularVelocity,
+        smoothedMotion: sim.smoothedMotion,
+        trend: sim.trend,
+        breathingScale: sim.breathingScale,
+        trailIntensity: sim.trailIntensity,
+        layers: { ...sim.layers },
+      });
+    });
+  });
 
-      if (progress < 1) {
-        requestAnimationFrame(fade);
-      } else {
-        setIsResetting(false);
-        setIntensityScore(0);
+  const resetExperience = useEffectEvent(() => {
+    const sim = simRef.current;
+    sim.isResetting = true;
+    sim.resetElapsed = 0;
+    sim.resetFrom = {
+      intensityScore: sim.intensityScore,
+      state: sim.state,
+      isActive: sim.isActive,
+      linearAcceleration: sim.linearAcceleration,
+      angularVelocity: sim.angularVelocity,
+      smoothedMotion: sim.smoothedMotion,
+      trend: sim.trend,
+      breathingScale: sim.breathingScale,
+      trailIntensity: sim.trailIntensity,
+      layers: { ...sim.layers },
+    };
+  });
+
+  const pushMotionSample = (sample: number) => {
+    const samples = simRef.current.motionSamples;
+    samples.push(sample);
+    if (samples.length > 12) {
+      samples.shift();
+    }
+  };
+
+  const updatePointerMotion = useEffectEvent((event: MouseEvent) => {
+    if (paramsRef.current.useDebugSlider) {
+      return;
+    }
+
+    const sim = simRef.current;
+    const now = event.timeStamp || performance.now();
+    const dt = Math.max((now - sim.lastMoveTs) / 1000, 1 / 240);
+    const dx = event.clientX - sim.lastPointerX;
+    const dy = event.clientY - sim.lastPointerY;
+    const distance = Math.hypot(dx, dy);
+    const velocity = distance / dt;
+    const linearAcceleration = Math.abs(velocity - sim.lastVelocity) / dt;
+
+    let angularVelocity = 0;
+    if (distance > 0.001) {
+      const heading = Math.atan2(dy, dx);
+      if (sim.lastHeading !== null) {
+        const delta = Math.atan2(Math.sin(heading - sim.lastHeading), Math.cos(heading - sim.lastHeading));
+        angularVelocity = Math.abs(delta) / dt * (180 / Math.PI);
+      }
+      sim.lastHeading = heading;
+    }
+
+    sim.lastMoveTs = now;
+    sim.lastPointerX = event.clientX;
+    sim.lastPointerY = event.clientY;
+    sim.lastVelocity = velocity;
+    sim.linearAcceleration = linearAcceleration;
+    sim.angularVelocity = angularVelocity;
+
+    const normalizedMotion = clamp01((linearAcceleration / 2400) * 0.55 + (angularVelocity / 720) * 0.75);
+    sim.pendingMotion = Math.max(sim.pendingMotion * 0.72, normalizedMotion);
+    sim.trailIntensity = Math.max(sim.trailIntensity, normalizedMotion > 0.65 ? 0.9 : normalizedMotion * 0.45);
+    pushMotionSample(normalizedMotion);
+  });
+
+  const stepSimulation = useEffectEvent((dt: number) => {
+    const sim = simRef.current;
+    const params = paramsRef.current;
+    const previousScore = sim.intensityScore;
+
+    if (sim.isResetting) {
+      sim.resetElapsed += dt;
+      const t = clamp01(sim.resetElapsed / RESET_DURATION);
+      sim.intensityScore = sim.resetFrom.intensityScore * (1 - t);
+      sim.smoothedMotion = sim.resetFrom.smoothedMotion * (1 - t);
+      sim.linearAcceleration = sim.resetFrom.linearAcceleration * (1 - t);
+      sim.angularVelocity = sim.resetFrom.angularVelocity * (1 - t);
+      sim.trailIntensity = sim.resetFrom.trailIntensity * (1 - t);
+      sim.layers.edge = sim.resetFrom.layers.edge * (1 - t);
+      sim.layers.chromatic = sim.resetFrom.layers.chromatic * (1 - t);
+      sim.layers.blur = sim.resetFrom.layers.blur * (1 - t);
+      sim.layers.distortion = sim.resetFrom.layers.distortion * (1 - t);
+      sim.trend = (sim.intensityScore - previousScore) / Math.max(dt, 1 / 240);
+      sim.state = 'Recovery';
+      sim.isActive = sim.intensityScore > EXIT_THRESHOLD;
+      sim.breathingScale = 1 + Math.sin(sim.breathingPhase) * 0.008 * sim.layers.blur;
+
+      if (t >= 1) {
+        sim.intensityScore = 0;
+        sim.state = 'Calm';
+        sim.isActive = false;
+        sim.isResetting = false;
+        sim.linearAcceleration = 0;
+        sim.angularVelocity = 0;
+        sim.pendingMotion = 0;
+        sim.smoothedMotion = 0;
+        sim.trailIntensity = 0;
+        sim.layers = { ...initialLayers };
+        sim.motionSamples = [];
+      }
+
+      syncUi();
+      return;
+    }
+
+    let motionSignal = sim.pendingMotion;
+    if (params.useDebugSlider) {
+      motionSignal = params.debugIntensity;
+      sim.pendingMotion = params.debugIntensity;
+    }
+
+    pushMotionSample(motionSignal);
+    const historyAverage =
+      sim.motionSamples.reduce((sum, sample) => sum + sample, 0) / Math.max(sim.motionSamples.length, 1);
+
+    sim.smoothedMotion = expLerp(sim.smoothedMotion, historyAverage, 6, dt);
+
+    if (!sim.isActive && sim.smoothedMotion > ENTER_THRESHOLD) {
+      sim.isActive = true;
+    } else if (sim.isActive && sim.smoothedMotion < EXIT_THRESHOLD && sim.intensityScore < 0.05) {
+      sim.isActive = false;
+    }
+
+    if (params.useDebugSlider) {
+      sim.intensityScore = expLerp(sim.intensityScore, params.debugIntensity, 2.2, dt);
+    } else {
+      if (sim.isActive) {
+        sim.intensityScore += sim.smoothedMotion * params.sensitivity * 0.95 * dt;
+      }
+      sim.intensityScore *= Math.exp(-params.decayRate * dt);
+    }
+
+    sim.intensityScore = clamp01(sim.intensityScore);
+    sim.trend = (sim.intensityScore - previousScore) / Math.max(dt, 1 / 240);
+    sim.state = getState(sim.intensityScore, sim.trend);
+
+    const chromaticTarget = clamp01((sim.intensityScore - 0.18) / 0.82);
+    const blurTarget = clamp01((sim.intensityScore - 0.12) / 0.88);
+    const distortionTarget = clamp01((sim.intensityScore - 0.42) / 0.58);
+    const edgeTarget = clamp01(sim.intensityScore);
+
+    sim.layers.edge = expLerp(sim.layers.edge, edgeTarget, 4.2, dt);
+    sim.layers.chromatic = expLerp(sim.layers.chromatic, chromaticTarget, 3.2, dt);
+    sim.layers.blur = expLerp(sim.layers.blur, blurTarget, 2.6, dt);
+    sim.layers.distortion = expLerp(sim.layers.distortion, distortionTarget, 2.1, dt);
+
+    sim.breathingPhase += dt * (params.mode === 'Psychedelic' ? 1.4 + sim.intensityScore * 1.8 : 0.9 + sim.intensityScore);
+    sim.breathingScale = 1 + Math.sin(sim.breathingPhase) * 0.015 * (0.2 + sim.layers.blur);
+
+    sim.trailIntensity = Math.max(sim.trailIntensity * Math.exp(-4 * dt), motionSignal > 0.65 ? 0.9 : 0);
+    sim.pendingMotion *= Math.exp(-7 * dt);
+    sim.linearAcceleration *= Math.exp(-7.5 * dt);
+    sim.angularVelocity *= Math.exp(-7.5 * dt);
+
+    syncUi();
+  });
+
+  useEffect(() => {
+    const onMouseMove = (event: MouseEvent) => updatePointerMotion(event);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Space' || event.key.toLowerCase() === 'b' || event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        resetExperience();
       }
     };
-    requestAnimationFrame(fade);
-  }, [intensityScore]);
 
-  // --- Mouse Motion Simulation ---
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [resetExperience, updatePointerMotion]);
+
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isResetting) return;
+    const interval = window.setInterval(() => stepSimulation(1 / 60), 1000 / 60);
+    return () => window.clearInterval(interval);
+  }, [stepSimulation]);
 
-      const now = Date.now();
-      const dt = (now - lastTime.current) / 1000;
-      if (dt === 0) return;
-
-      const dx = e.clientX - lastMousePos.current.x;
-      const dy = e.clientY - lastMousePos.current.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      
-      const currentVel = dist / dt;
-      const accel = Math.abs(currentVel - velocity.current) / dt;
-      
-      velocity.current = currentVel;
-      lastMousePos.current = { x: e.clientX, y: e.clientY };
-      lastTime.current = now;
-
-      // Update Intensity Score
-      setIntensityScore(prev => {
-        const motionContribution = (accel * 0.00005) * sensitivity;
-        return Math.min(Math.max(prev + motionContribution, 0), 1);
+  useEffect(() => {
+    window.render_game_to_text = () =>
+      JSON.stringify({
+        mode,
+        state: simRef.current.state,
+        intensityScore: Number(simRef.current.intensityScore.toFixed(3)),
+        smoothedMotion: Number(simRef.current.smoothedMotion.toFixed(3)),
+        linearAcceleration: Number(simRef.current.linearAcceleration.toFixed(1)),
+        angularVelocity: Number(simRef.current.angularVelocity.toFixed(1)),
+        layers: {
+          edge: Number(simRef.current.layers.edge.toFixed(3)),
+          chromatic: Number(simRef.current.layers.chromatic.toFixed(3)),
+          blur: Number(simRef.current.layers.blur.toFixed(3)),
+          distortion: Number(simRef.current.layers.distortion.toFixed(3)),
+        },
+        controls: {
+          reset: ['Space', 'B', 'Y'],
+          debugSlider: useDebugSlider,
+        },
+        coordinateSystem: 'screen pointer motion, origin top-left, X right, Y down',
       });
+
+    window.advanceTime = (ms: number) => {
+      const steps = Math.max(1, Math.round(ms / (1000 / 60)));
+      for (let index = 0; index < steps; index += 1) {
+        stepSimulation(1 / 60);
+      }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, [isResetting, sensitivity]);
-
-  // --- Decay & Layer Logic ---
-  const [layers, setLayers] = useState({
-    distortion: 0,
-    patterns: 0,
-    color: 0,
-    breathing: 0
-  });
-  const [breathingScale, setBreathingScale] = useState(1);
-  const [trailIntensity, setTrailIntensity] = useState(0);
-
-  const [intensityTrend, setIntensityTrend] = useState(0);
-  const lastScore = useRef(0);
-  const motionHistory = useRef<number[]>([]);
-
-  // Simulation Constants
-  const ENTER_THRESHOLD = 0.15;
-  const EXIT_THRESHOLD = 0.08;
-  const ATTACK = { distortion: 0.1, patterns: 0.05, color: 0.08, breathing: 0.03 };
-  const RELEASE = { distortion: 0.15, patterns: 0.08, color: 0.04, breathing: 0.02 };
+    return () => {
+      delete window.render_game_to_text;
+      delete window.advanceTime;
+    };
+  }, [mode, stepSimulation, useDebugSlider]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (isResetting) return;
-      
-      // 1. Simulate Motion Input (Rolling History for Inertia)
-      const time = Date.now() / 1000;
-      const baseMotion = (Math.sin(time * 0.5) * 0.5 + 0.5) * 0.3;
-      const mouseInfluence = Math.min(velocity.current * 0.0005, 0.7);
-      const rawMotion = baseMotion + mouseInfluence;
-
-      motionHistory.current.push(rawMotion);
-      if (motionHistory.current.length > 60) motionHistory.current.shift();
-      const avgMotion = motionHistory.current.reduce((a, b) => a + b, 0) / motionHistory.current.length;
-
-      // 2. Hysteresis Logic
-      setIsExperienceActive(prev => {
-        if (!prev && avgMotion > ENTER_THRESHOLD) return true;
-        if (prev && avgMotion < EXIT_THRESHOLD && intensityScore < 0.05) return false;
-        return prev;
-      });
-
-      // 3. Update Intensity Score
-      setIntensityScore(prev => {
-        let next = prev;
-        if (isExperienceActive) {
-          next += (avgMotion * 0.05);
-        }
-        const decay = Math.exp(-decayRate * 0.05);
-        next = Math.max(next * decay - 0.001, 0);
-        
-        // Trend calculation
-        const trend = (next - lastScore.current) / 0.05;
-        setIntensityTrend(trend);
-        lastScore.current = next;
-        return Math.min(next, 1);
-      });
-
-      // 4. Layered Attack/Release
-      setLayers(prev => {
-        const targetDistortion = mode === 'Psychedelic' ? Math.pow(intensityScore, 0.6) : intensityScore * 0.3;
-        const targetPatterns = mode === 'Psychedelic' ? (intensityScore > 0.5 ? Math.pow((intensityScore - 0.5) / 0.5, 2) : 0) : intensityScore * 0.1;
-        const targetColor = mode === 'Psychedelic' ? intensityScore : Math.pow(intensityScore, 0.8);
-        const targetBreathing = mode === 'Psychedelic' ? Math.pow(intensityScore, 1.5) : intensityScore * 0.5;
-
-        const smooth = (curr: number, target: number, key: keyof typeof ATTACK) => {
-          const speed = target > curr ? ATTACK[key] : RELEASE[key];
-          return curr + (target - curr) * speed;
-        };
-
-        return {
-          distortion: smooth(prev.distortion, targetDistortion, 'distortion'),
-          patterns: smooth(prev.patterns, targetPatterns, 'patterns'),
-          color: smooth(prev.color, targetColor, 'color'),
-          breathing: smooth(prev.breathing, targetBreathing, 'breathing')
-        };
-      });
-
-      // 5. Breathing effect
-      const breathingFreq = mode === 'Psychedelic' ? 0.4 + intensityScore * 1.6 : 0.3 + intensityScore * 0.7;
-      const breathing = 1 + Math.sin(Date.now() * 0.002 * breathingFreq) * 0.02 * layers.breathing;
-      setBreathingScale(breathing);
-
-      // 6. Trail intensity
-      setTrailIntensity(prevTrail => Math.max(prevTrail * 0.9, velocity.current > 500 ? 1 : 0));
-
-    }, 50);
-    return () => clearInterval(interval);
-  }, [isResetting, decayRate, isExperienceActive, intensityScore, mode, layers.breathing]);
-
-  // --- State Machine ---
-  useEffect(() => {
-    if (intensityScore < 0.12) setState('Calm');
-    else if (intensityTrend < -0.25 && intensityScore > 0.35) setState('Recovery');
-    else if (intensityScore < 0.5) setState('Shift');
-    else setState('Intense');
-  }, [intensityScore, intensityTrend]);
-
-  // --- Camera Setup ---
-  useEffect(() => {
-    if (useCamera && videoRef.current) {
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-          if (videoRef.current) videoRef.current.srcObject = stream;
-        })
-        .catch(err => {
-          console.error("Camera error:", err);
-          setUseCamera(false);
-        });
+    if (!useCamera) {
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        mediaStreamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      return;
     }
+
+    let cancelled = false;
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: 'environment' } })
+      .then(stream => {
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        mediaStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      })
+      .catch(() => {
+        setUseCamera(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [useCamera]);
 
-  // --- Visual Styles ---
   const filterStyles = {
     filter: `
-      contrast(${100 + layers.color * (mode === 'Psychedelic' ? 60 : 30)}%)
-      saturate(${100 + layers.color * (mode === 'Psychedelic' ? 120 : 60)}%)
-      hue-rotate(${layers.color * (mode === 'Psychedelic' ? 120 : 20)}deg)
-      blur(${layers.distortion * 1.5}px)
-      ${state === 'Recovery' ? 'sepia(0.3) brightness(1.1)' : ''}
-      ${mode === 'Empathic' ? 'sepia(0.2) brightness(1.05)' : ''}
-      url(#radialDistortion)
+      saturate(${100 + ui.layers.edge * (mode === 'Psychedelic' ? 90 : 35)}%)
+      contrast(${100 + ui.layers.edge * (mode === 'Psychedelic' ? 45 : 22)}%)
+      hue-rotate(${ui.layers.chromatic * (mode === 'Psychedelic' ? 96 : 18)}deg)
+      blur(${ui.layers.blur * 1.25}px)
+      url(#tripDistortion)
     `,
-    transform: `scale(${breathingScale + layers.distortion * 0.04}) rotate(${layers.distortion * (mode === 'Psychedelic' ? 1.5 : 0.5)}deg)`,
+    transform: `scale(${ui.breathingScale + ui.layers.distortion * 0.025})`,
   };
 
-  const peripheralMaskStyle = {
-    maskImage: `radial-gradient(circle, transparent ${40 - layers.distortion * 20}%, black ${80 - layers.distortion * 10}%)`,
-    WebkitMaskImage: `radial-gradient(circle, transparent ${40 - layers.distortion * 20}%, black ${80 - layers.distortion * 10}%)`,
-  };
+  const backgroundTint =
+    mode === 'Psychedelic'
+      ? 'from-[#14061f] via-[#030712] to-[#02040a]'
+      : 'from-[#17130a] via-[#06070a] to-[#02040a]';
 
-  const edgeGlowStyle = {
-    boxShadow: `inset 0 0 ${layers.color * 120}px ${mode === 'Psychedelic' ? 'rgba(168, 85, 247, 0.8)' : 'rgba(251, 191, 36, 0.6)'}`,
-    border: `${layers.color * 12}px solid ${mode === 'Psychedelic' ? 'rgba(168, 85, 247, 0.6)' : 'rgba(251, 191, 36, 0.4)'}`,
-    filter: `drop-shadow(0 0 ${layers.color * 10}px rgba(255, 255, 255, ${layers.color * 0.5}))`,
-    ...peripheralMaskStyle
-  };
+  const edgeTint =
+    mode === 'Psychedelic'
+      ? `rgba(232, 121, 249, ${0.15 + ui.layers.edge * 0.65})`
+      : `rgba(251, 191, 36, ${0.12 + ui.layers.edge * 0.45})`;
 
   return (
-    <div className="min-h-screen bg-black text-white font-sans selection:bg-purple-500/30 overflow-hidden flex flex-col">
-      {/* --- Background / Passthrough Simulator --- */}
+    <div className="min-h-screen overflow-hidden bg-black text-white selection:bg-fuchsia-500/20">
       <svg className="hidden">
-        <filter id="radialDistortion">
-          <feTurbulence 
-            type="fractalNoise" 
-            baseFrequency="0.015" 
-            numOctaves="3" 
-            seed="2"
-          >
-            <animate 
-              attributeName="baseFrequency" 
-              values="0.015;0.02;0.015" 
-              dur="8s" 
-              repeatCount="indefinite" 
-            />
+        <filter id="tripDistortion">
+          <feTurbulence type="fractalNoise" baseFrequency="0.008 0.015" numOctaves="2" seed="7">
+            <animate attributeName="baseFrequency" values="0.008 0.015;0.012 0.02;0.008 0.015" dur="12s" repeatCount="indefinite" />
           </feTurbulence>
-          <feDisplacementMap 
-            in="SourceGraphic" 
-            scale={layers.distortion * 80} 
-            xChannelSelector="R" 
-            yChannelSelector="G" 
+          <feDisplacementMap
+            in="SourceGraphic"
+            scale={ui.layers.distortion * DISTORTION_CAP * 700}
+            xChannelSelector="R"
+            yChannelSelector="G"
           />
         </filter>
       </svg>
 
-      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-        {/* Trail Layer (Ghosting) */}
-        {trailIntensity > 0.1 && (
-          <div 
-            className="absolute inset-0 opacity-30 mix-blend-screen transition-transform duration-200"
-            style={{ 
-              ...filterStyles, 
-              transform: `${filterStyles.transform} translate(10px, 5px)`,
-              filter: `${filterStyles.filter} brightness(1.5)`
-            }}
-          >
-            {useCamera ? (
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full bg-zinc-900/50" />
-            )}
-          </div>
-        )}
-
-        <div 
-          className="absolute inset-0 transition-all duration-300 ease-out"
-          style={filterStyles}
-        >
+      <div className="pointer-events-none fixed inset-0">
+        <div className={`absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_38%)] bg-gradient-to-br ${backgroundTint}`} />
+        <div className="absolute inset-0 opacity-80" style={filterStyles}>
           {useCamera ? (
-            <video 
-              ref={videoRef} 
-              autoPlay 
-              playsInline 
-              className="w-full h-full object-cover opacity-60"
-            />
+            <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover opacity-55" />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-zinc-900 to-black flex items-center justify-center">
-              <div className="grid grid-cols-8 gap-4 opacity-20">
-                {Array.from({ length: 64 }).map((_, i) => (
-                  <div key={i} className="w-12 h-12 border border-white/20 rounded-full animate-pulse" style={{ animationDelay: `${i * 0.1}s` }} />
+            <div className="flex h-full w-full items-center justify-center">
+              <div className="grid grid-cols-8 gap-5 opacity-25">
+                {Array.from({ length: 48 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="h-14 w-14 rounded-full border border-white/15"
+                    style={{
+                      transform: `scale(${0.85 + ((index % 5) * 0.04)})`,
+                      boxShadow: `0 0 ${10 + ui.layers.edge * 28}px rgba(255,255,255,${0.04 + ui.layers.edge * 0.08})`,
+                    }}
+                  />
                 ))}
               </div>
             </div>
           )}
         </div>
-        
-        {/* Edge Glow Overlay */}
-        <div 
-          className="absolute inset-0 transition-all duration-300 pointer-events-none"
-          style={edgeGlowStyle}
+
+        {ui.trailIntensity > 0.08 && (
+          <div
+            className="absolute inset-0 mix-blend-screen opacity-20"
+            style={{
+              transform: `translate(${ui.trailIntensity * 14}px, ${ui.trailIntensity * 8}px) scale(${1 + ui.trailIntensity * 0.01})`,
+              background:
+                mode === 'Psychedelic'
+                  ? 'radial-gradient(circle at 40% 30%, rgba(236,72,153,0.24), transparent 35%), radial-gradient(circle at 70% 60%, rgba(59,130,246,0.16), transparent 35%)'
+                  : 'radial-gradient(circle at 40% 30%, rgba(251,191,36,0.18), transparent 35%), radial-gradient(circle at 70% 60%, rgba(45,212,191,0.12), transparent 35%)',
+            }}
+          />
+        )}
+
+        <div
+          className="absolute inset-0 transition-[box-shadow,border] duration-500"
+          style={{
+            boxShadow: `inset 0 0 ${40 + ui.layers.edge * 140}px ${edgeTint}`,
+            border: `${ui.layers.edge * 10}px solid ${edgeTint}`,
+          }}
         />
 
-        {/* Chromatic Aberration Simulation (Simplified) */}
-        {layers.color > 0.1 && (
-          <div className="absolute inset-0 mix-blend-screen pointer-events-none overflow-hidden">
-            <div 
-              className="absolute inset-0 bg-red-500/20 transition-transform duration-75" 
-              style={{ transform: `translateX(${layers.color * 10}px) scale(${1 + layers.color * 0.02})` }}
+        {ui.layers.chromatic > 0.08 && (
+          <div className="absolute inset-0 overflow-hidden mix-blend-screen">
+            <div
+              className="absolute inset-0 bg-red-500/15"
+              style={{ transform: `translateX(${ui.layers.chromatic * 10}px)` }}
             />
-            <div 
-              className="absolute inset-0 bg-blue-500/20 transition-transform duration-75" 
-              style={{ transform: `translateX(-${layers.color * 10}px) scale(${1 + layers.color * 0.02})` }}
+            <div
+              className="absolute inset-0 bg-cyan-400/15"
+              style={{ transform: `translateX(-${ui.layers.chromatic * 10}px)` }}
             />
           </div>
         )}
-
-        {/* Layer B: Pattern Overlay Simulation */}
-        <AnimatePresence>
-          {layers.patterns > 0.1 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: layers.patterns * 0.3 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 z-10 pointer-events-none mix-blend-overlay"
-              style={{
-                backgroundImage: `radial-gradient(circle at 50% 50%, transparent 0%, rgba(139, 92, 246, 0.2) 100%), 
-                                 repeating-conic-gradient(from 0deg, transparent 0deg 30deg, rgba(255,255,255,0.05) 30deg 60deg)`
-              }}
-            />
-          )}
-        </AnimatePresence>
       </div>
 
-      {/* --- UI Layer --- */}
-      <header className="relative z-10 p-6 flex justify-between items-start pointer-events-none">
-        <div className="pointer-events-auto">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-3 h-3 rounded-full bg-purple-500 animate-ping" />
-            <h1 className="text-xs font-mono uppercase tracking-[0.2em] text-zinc-400">Quest Motion Trip</h1>
-          </div>
-          <div className="text-4xl font-light tracking-tighter flex items-baseline gap-4">
-            <span>{state}</span>
-            <span className="text-sm font-mono text-zinc-500">{(intensityScore * 100).toFixed(1)}%</span>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-4 pointer-events-auto items-end">
-          <button 
-            onClick={() => setShowGuide(!showGuide)}
-            className="p-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-          >
-            <Info className="w-5 h-5 text-zinc-400" />
-          </button>
-          
-          <button 
-            onClick={() => setUseCamera(!useCamera)}
-            className={`p-3 rounded-full border transition-all ${useCamera ? 'bg-purple-500/20 border-purple-500/50 text-purple-400' : 'bg-white/5 border-white/10 text-zinc-400'}`}
-          >
-            <CameraIcon className="w-5 h-5" />
-          </button>
-        </div>
-      </header>
-
-      <main className="relative z-10 flex-1 flex flex-col justify-end p-8 gap-8 pointer-events-none">
-        {/* Visual Feedback Bar */}
-        <div className="w-full max-w-2xl mx-auto space-y-4 pointer-events-auto">
-          <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
-            <motion.div 
-              className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"
-              initial={{ width: 0 }}
-              animate={{ width: `${intensityScore * 100}%` }}
-              transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-            />
-          </div>
-          
-          <div className="flex justify-between items-center text-[10px] font-mono uppercase tracking-widest text-zinc-500">
-            <div className="flex items-center gap-2">
-              <Activity className="w-3 h-3" />
-              <span>Motion Analyzer Active</span>
+      <div className="relative z-10 flex min-h-screen flex-col">
+        <header className="flex items-start justify-between p-6 md:p-8">
+          <div>
+            <div className="mb-2 flex items-center gap-3 text-[11px] uppercase tracking-[0.32em] text-zinc-400">
+              <Waves className="h-4 w-4" />
+              <span>Critical VR Motion Trip</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Shield className="w-3 h-3" />
-              <span>Safety Limits: Clamped 0.05 UV</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Controls Panel */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pointer-events-auto">
-          <div className="bg-black/40 backdrop-blur-xl border border-white/10 p-6 rounded-3xl space-y-4">
-            <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 uppercase">
-              <Settings className="w-3 h-3" />
-              <span>Experience Mode</span>
-            </div>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setMode('Psychedelic')}
-                className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-mono transition-all border ${
-                  mode === 'Psychedelic' 
-                    ? 'bg-purple-500/20 border-purple-500 text-purple-300 shadow-[0_0_10px_rgba(168,85,247,0.3)]' 
-                    : 'bg-zinc-800/50 border-zinc-700 text-zinc-500 hover:border-zinc-500'
-                }`}
-              >
-                PSYCHEDELIC
-              </button>
-              <button 
-                onClick={() => setMode('Empathic')}
-                className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-mono transition-all border ${
-                  mode === 'Empathic' 
-                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.3)]' 
-                    : 'bg-zinc-800/50 border-zinc-700 text-zinc-500 hover:border-zinc-500'
-                }`}
-              >
-                EMPATHIC
-              </button>
+            <div className="flex items-end gap-4">
+              <h1 className="text-4xl font-light tracking-[-0.04em] md:text-6xl">{ui.state}</h1>
+              <div className="pb-2 font-mono text-sm text-zinc-400">{(deferredScore * 100).toFixed(1)}%</div>
             </div>
           </div>
 
-          <div className="bg-black/40 backdrop-blur-xl border border-white/10 p-6 rounded-3xl space-y-4">
-            <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 uppercase">
-              <Settings className="w-3 h-3" />
-              <span>C# Parameters</span>
-            </div>
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-zinc-500">Sensitivity</span>
-                  <span>{sensitivity.toFixed(1)}</span>
-                </div>
-                <input 
-                  type="range" min="0.1" max="2" step="0.1" 
-                  value={sensitivity} onChange={e => setSensitivity(parseFloat(e.target.value))}
-                  className="w-full accent-purple-500"
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-zinc-500">Decay Rate</span>
-                  <span>{decayRate.toFixed(1)}</span>
-                </div>
-                <input 
-                  type="range" min="0.1" max="3" step="0.1" 
-                  value={decayRate} onChange={e => setDecayRate(parseFloat(e.target.value))}
-                  className="w-full accent-purple-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-black/40 backdrop-blur-xl border border-white/10 p-6 rounded-3xl flex flex-col justify-between items-center text-center gap-4">
-            <div className="space-y-1">
-              <h3 className="text-sm font-medium">Emergency Reset</h3>
-              <p className="text-[10px] text-zinc-500 leading-relaxed uppercase tracking-tighter">
-                Simulates Controller Button B/Y
-              </p>
-            </div>
-            <button 
-              onClick={resetExperience}
-              disabled={isResetting || intensityScore === 0}
-              className="group relative w-20 h-20 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center hover:bg-red-500/20 hover:border-red-500/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowGuide(value => !value)}
+              className="rounded-full border border-white/10 bg-white/5 p-3 text-zinc-300 transition hover:bg-white/10"
             >
-              <RefreshCw className={`w-8 h-8 text-zinc-400 group-hover:text-red-400 transition-colors ${isResetting ? 'animate-spin' : ''}`} />
+              <Info className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setUseCamera(value => !value)}
+              className={`rounded-full border p-3 transition ${
+                useCamera
+                  ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-300'
+                  : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'
+              }`}
+            >
+              <CameraIcon className="h-5 w-5" />
             </button>
           </div>
+        </header>
 
-          <div className="bg-black/40 backdrop-blur-xl border border-white/10 p-6 rounded-3xl space-y-4">
-            <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 uppercase">
-              <Zap className="w-3 h-3" />
-              <span>Live Telemetry</span>
+        <main className="mt-auto grid gap-5 px-6 pb-8 md:grid-cols-12 md:px-8">
+          <section className="pointer-events-auto rounded-[2rem] border border-white/10 bg-black/40 p-6 backdrop-blur-xl md:col-span-4">
+            <div className="mb-5 flex items-center gap-2 text-[11px] uppercase tracking-[0.28em] text-zinc-400">
+              <Settings className="h-4 w-4" />
+              <span>Mode And Safety</span>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-              <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                <div className="text-zinc-500 mb-1 uppercase">Motion History</div>
-                <div className="text-lg">
-                  {(motionHistory.current.reduce((a, b) => a + b, 0) / (motionHistory.current.length || 1)).toFixed(3)}
-                </div>
-              </div>
-              <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                <div className="text-zinc-500 mb-1 uppercase">Active State</div>
-                <div className={`text-lg ${isExperienceActive ? 'text-green-400' : 'text-zinc-600'}`}>
-                  {isExperienceActive ? 'ACTIVE' : 'IDLE'}
-                </div>
-              </div>
-              <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                <div className="text-zinc-500 mb-1 uppercase">Distortion (L-A)</div>
-                <div className="text-lg">{(layers.distortion * 100).toFixed(1)}%</div>
-              </div>
-              <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                <div className="text-zinc-500 mb-1 uppercase">Patterns (L-B)</div>
-                <div className="text-lg">{(layers.patterns * 100).toFixed(1)}%</div>
-              </div>
-              <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                <div className="text-zinc-500 mb-1 uppercase">Color (L-C)</div>
-                <div className="text-lg">{(layers.color * 100).toFixed(1)}%</div>
-              </div>
-              <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                <div className="text-zinc-500 mb-1 uppercase">Breathing</div>
-                <div className="text-lg">{(breathingScale).toFixed(3)}x</div>
-              </div>
-              <div className="col-span-2 bg-white/5 p-3 rounded-xl border border-white/5 flex justify-between items-center">
-                <span className="text-zinc-500 uppercase">Safety Status</span>
-                <span className={intensityScore > 0.8 ? 'text-red-400' : 'text-green-400'}>
-                  {intensityScore > 0.8 ? 'LIMIT REACHED' : 'NOMINAL'}
+
+            <div className="mb-5 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setMode('Psychedelic')}
+                className={`rounded-2xl border px-4 py-3 text-xs font-medium uppercase tracking-[0.2em] transition ${
+                  mode === 'Psychedelic'
+                    ? 'border-fuchsia-400/60 bg-fuchsia-500/15 text-fuchsia-200'
+                    : 'border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10'
+                }`}
+              >
+                Psychedelic
+              </button>
+              <button
+                onClick={() => setMode('Empathic')}
+                className={`rounded-2xl border px-4 py-3 text-xs font-medium uppercase tracking-[0.2em] transition ${
+                  mode === 'Empathic'
+                    ? 'border-amber-400/60 bg-amber-500/15 text-amber-200'
+                    : 'border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10'
+                }`}
+              >
+                Empathic
+              </button>
+            </div>
+
+            <div className="mb-5 space-y-3 text-sm text-zinc-300">
+              <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                <span className="flex items-center gap-2">
+                  <SlidersHorizontal className="h-4 w-4 text-zinc-400" />
+                  Debug slider
                 </span>
+                <input
+                  type="checkbox"
+                  checked={useDebugSlider}
+                  onChange={event => setUseDebugSlider(event.target.checked)}
+                  className="h-4 w-4 accent-fuchsia-500"
+                />
+              </label>
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
+                <div className="mb-2 flex justify-between text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+                  <span>Target Intensity</span>
+                  <span>{debugIntensity.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={debugIntensity}
+                  onChange={event => setDebugIntensity(Number(event.target.value))}
+                  className="w-full"
+                />
               </div>
             </div>
-          </div>
-        </div>
-      </main>
 
-      {/* --- Overlays --- */}
+            <div className="space-y-4">
+              <div>
+                <div className="mb-2 flex justify-between text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+                  <span>Sensitivity</span>
+                  <span>{sensitivity.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.25"
+                  max="2"
+                  step="0.05"
+                  value={sensitivity}
+                  onChange={event => setSensitivity(Number(event.target.value))}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <div className="mb-2 flex justify-between text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+                  <span>Decay</span>
+                  <span>{decayRate.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="3"
+                  step="0.05"
+                  value={decayRate}
+                  onChange={event => setDecayRate(Number(event.target.value))}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="pointer-events-auto rounded-[2rem] border border-white/10 bg-black/40 p-6 backdrop-blur-xl md:col-span-5">
+            <div className="mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.28em] text-zinc-400">
+                <Activity className="h-4 w-4" />
+                <span>Motion Analyzer</span>
+              </div>
+              <div className={`rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${ui.isActive ? 'bg-emerald-400/15 text-emerald-300' : 'bg-white/5 text-zinc-500'}`}>
+                {ui.isActive ? 'Active' : 'Idle'}
+              </div>
+            </div>
+
+            <div className="mb-5 h-2 overflow-hidden rounded-full bg-white/10">
+              <motion.div
+                className="h-full bg-gradient-to-r from-sky-400 via-fuchsia-400 to-amber-300"
+                animate={{ width: `${deferredScore * 100}%` }}
+                transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="mb-1 text-[11px] uppercase tracking-[0.18em] text-zinc-500">Linear Accel</div>
+                <div className="text-lg text-white">{ui.linearAcceleration.toFixed(1)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="mb-1 text-[11px] uppercase tracking-[0.18em] text-zinc-500">Angular Vel</div>
+                <div className="text-lg text-white">{ui.angularVelocity.toFixed(1)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="mb-1 text-[11px] uppercase tracking-[0.18em] text-zinc-500">Smoothed</div>
+                <div className="text-lg text-white">{ui.smoothedMotion.toFixed(3)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="mb-1 text-[11px] uppercase tracking-[0.18em] text-zinc-500">Edge Glow</div>
+                <div className="text-lg text-white">{(ui.layers.edge * 100).toFixed(0)}%</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="mb-1 text-[11px] uppercase tracking-[0.18em] text-zinc-500">Chromatic</div>
+                <div className="text-lg text-white">{(ui.layers.chromatic * 100).toFixed(0)}%</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="mb-1 text-[11px] uppercase tracking-[0.18em] text-zinc-500">Distortion</div>
+                <div className="text-lg text-white">{(ui.layers.distortion * DISTORTION_CAP).toFixed(3)}</div>
+              </div>
+            </div>
+          </section>
+
+          <section className="pointer-events-auto flex flex-col justify-between rounded-[2rem] border border-white/10 bg-black/40 p-6 backdrop-blur-xl md:col-span-3">
+            <div>
+              <div className="mb-4 flex items-center gap-2 text-[11px] uppercase tracking-[0.28em] text-zinc-400">
+                <Shield className="h-4 w-4" />
+                <span>Comfort Layer</span>
+              </div>
+              <div className="space-y-3 text-sm text-zinc-300">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  Distortion stays clamped to <span className="font-mono text-white">0.05</span> UV offset.
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  Reset fades all layers to zero over <span className="font-mono text-white">1.5s</span>.
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  Use <span className="font-mono text-white">Space</span>, <span className="font-mono text-white">B</span>, or <span className="font-mono text-white">Y</span> for emergency stop.
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => resetExperience()}
+              className="mt-6 flex items-center justify-center gap-3 rounded-[1.5rem] border border-red-400/20 bg-red-500/10 px-4 py-4 text-sm uppercase tracking-[0.24em] text-red-200 transition hover:bg-red-500/15"
+            >
+              <RefreshCw className="h-5 w-5" />
+              Reset Trip
+            </button>
+          </section>
+        </main>
+      </div>
+
       <AnimatePresence>
         {showGuide && (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-md"
           >
-            <div className="max-w-xl w-full bg-zinc-900 border border-white/10 rounded-[2rem] p-8 space-y-6">
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-light">Project Directive Guide</h2>
-                <button onClick={() => setShowGuide(false)} className="text-zinc-500 hover:text-white">Close</button>
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-zinc-950/95 p-8"
+            >
+              <div className="mb-5 flex items-center justify-between">
+                <h2 className="text-2xl font-light tracking-[-0.03em]">Quest XR Simulator Notes</h2>
+                <button onClick={() => setShowGuide(false)} className="text-sm text-zinc-400 hover:text-white">
+                  Close
+                </button>
               </div>
-              
-              <div className="space-y-4 text-sm text-zinc-400 leading-relaxed">
+              <div className="space-y-4 text-sm leading-relaxed text-zinc-300">
                 <p>
-                  This simulator demonstrates the <strong>MotionToExperienceManager</strong> logic. 
-                  Move your mouse rapidly to simulate head motion and increase the <strong>Intensity Score</strong>.
+                  This local app mirrors the intended <strong>MotionToExperienceManager</strong> flow: smoothed motion analysis,
+                  exponential decay, four-state machine, and comfort-safe visual caps for Passthrough-oriented effects.
                 </p>
-                <div className="grid grid-cols-1 gap-3">
-                  <div className="flex gap-3 items-start">
-                    <div className="w-6 h-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">1</div>
-                    <p><strong>Edge Glow:</strong> Sobel filter simulation increases with score.</p>
+                <p>
+                  Turn off the debug slider to drive the score with mouse motion. Leave it on to tune values before wearing a headset,
+                  just like the Unity-side editor slider requested for the Quest build.
+                </p>
+                <div className="rounded-2xl border border-sky-400/20 bg-sky-400/10 p-4 text-sky-100">
+                  <div className="mb-1 flex items-center gap-2 font-medium">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>Implementation path</span>
                   </div>
-                  <div className="flex gap-3 items-start">
-                    <div className="w-6 h-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">2</div>
-                    <p><strong>Distortion:</strong> UV offset is clamped to 0.05 to prevent motion sickness.</p>
+                  <div>
+                    Unity runtime logic lives in <code>MotionToExperienceManager.cs</code>, while project guidance and the new
+                    <code>meta-quest-xr</code> skill live under <code>skills/</code>.
                   </div>
-                  <div className="flex gap-3 items-start">
-                    <div className="w-6 h-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">3</div>
-                    <p><strong>Decay:</strong> Score drops exponentially when motion stops.</p>
-                  </div>
-                </div>
-                <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex gap-3 text-blue-400">
-                  <AlertCircle className="w-5 h-5 shrink-0" />
-                  <p className="text-xs italic">
-                    Note: The Unity C# script and Shader Graph guides are available in the project files for your Quest implementation.
-                  </p>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Instructions Toast */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-        <div className="bg-white/5 backdrop-blur-md border border-white/10 px-4 py-2 rounded-full text-[10px] uppercase tracking-widest text-zinc-500">
-          Move Mouse to Simulate Motion • Press Space for Reset
-        </div>
+      <div className="pointer-events-none fixed bottom-5 left-1/2 z-20 -translate-x-1/2 rounded-full border border-white/10 bg-black/45 px-4 py-2 text-[11px] uppercase tracking-[0.24em] text-zinc-400 backdrop-blur-md">
+        Move mouse for head motion simulation. Space, B, or Y resets.
       </div>
     </div>
   );
