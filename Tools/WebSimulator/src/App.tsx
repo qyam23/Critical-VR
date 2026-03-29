@@ -129,6 +129,7 @@ export default function App() {
   const [mode, setMode] = useState<ExperienceMode>('Psychedelic');
   const [showGuide, setShowGuide] = useState(false);
   const [useCamera, setUseCamera] = useState(false);
+  const [introProgress, setIntroProgress] = useState(0);
   const [useDebugSlider, setUseDebugSlider] = useState(true);
   const [debugIntensity, setDebugIntensity] = useState(0.48);
   const [sensitivity, setSensitivity] = useState(1);
@@ -260,6 +261,10 @@ export default function App() {
   });
 
   const stepSimulation = useEffectEvent((dt: number) => {
+    if (introProgress < 1) {
+      return;
+    }
+
     const sim = simRef.current;
     const params = paramsRef.current;
     const previousScore = sim.intensityScore;
@@ -384,6 +389,19 @@ export default function App() {
   }, [resetExperience, updatePointerMotion]);
 
   useEffect(() => {
+    const start = performance.now();
+    const interval = window.setInterval(() => {
+      const progress = clamp01((performance.now() - start) / 10000);
+      setIntroProgress(progress);
+      if (progress >= 1) {
+        window.clearInterval(interval);
+      }
+    }, 1000 / 60);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     const interval = window.setInterval(() => stepSimulation(1 / 60), 1000 / 60);
     return () => window.clearInterval(interval);
   }, [stepSimulation]);
@@ -479,6 +497,8 @@ export default function App() {
     mode === 'Psychedelic'
       ? `rgba(232, 121, 249, ${0.25 + ui.layers.edge * 0.75})`
       : `rgba(251, 191, 36, ${0.18 + ui.layers.edge * 0.55})`;
+  const introOpacity = 1 - introProgress;
+  const introReveal = 8 + introProgress * 160;
 
   return (
     <div className="min-h-screen overflow-hidden bg-black text-white selection:bg-fuchsia-500/20">
@@ -581,6 +601,16 @@ export default function App() {
               style={{ transform: `translateX(-${ui.layers.chromatic * 18 + ui.layers.overdrive * 24}px) scale(${1.01 + ui.layers.overdrive * 0.02})` }}
             />
           </div>
+        )}
+
+        {introProgress < 1 && (
+          <div
+            className="absolute inset-0 z-40 transition-opacity"
+            style={{
+              opacity: introOpacity,
+              background: `radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 0%, rgba(0,0,0,0) ${introReveal * 0.2}%, rgba(0,0,0,0.94) ${introReveal * 0.45}%, rgba(0,0,0,1) ${introReveal}%)`,
+            }}
+          />
         )}
       </div>
 
@@ -818,7 +848,8 @@ export default function App() {
               <div className="space-y-4 text-sm leading-relaxed text-zinc-300">
                 <p>
                   This local app mirrors the intended <strong>MotionToExperienceManager</strong> flow: smoothed motion analysis,
-                  exponential decay, four-state machine, and comfort-safe visual caps for Passthrough-oriented effects.
+                  temporal inertia, four-state machine, layered attack and release timing, and comfort-safe visual caps for
+                  passthrough-oriented effects.
                 </p>
                 <p>
                   Turn off the debug slider to drive the score with mouse motion. Leave it on to tune values before wearing a headset,
@@ -830,8 +861,8 @@ export default function App() {
                     <span>Implementation path</span>
                   </div>
                   <div>
-                    Unity runtime logic lives in <code>MotionToExperienceManager.cs</code>, while project guidance and the new
-                    <code>meta-quest-xr</code> skill live under <code>skills/</code>.
+                    Unity runtime logic now lives under <code>Assets/CriticalVR/Scripts/Runtime</code>, while Quest deployment
+                    guidance lives under <code>Docs/Quest</code>.
                   </div>
                 </div>
               </div>

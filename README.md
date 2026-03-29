@@ -1,56 +1,66 @@
 # Critical-VR
 
-Local simulator and Unity implementation notes for a Meta Quest XR "motion trip" experience.
+Critical-VR is now organized as a Unity-first Meta Quest passthrough project package with a desktop simulator kept only as a support tool.
 
-## What is in this repo
+## Primary Product Path
 
-- A local `React + Vite` simulator for testing motion-driven intensity and comfort tuning on desktop
-- A Unity-ready runtime script in [`MotionToExperienceManager.cs`](./MotionToExperienceManager.cs)
-- Setup and shader notes in [`SetupGuide.md`](./SetupGuide.md) and [`ShaderGraphGuide.md`](./ShaderGraphGuide.md)
-- Downloaded and project-local skills under [`skills/`](./skills/)
+The primary target is `Meta Quest passthrough VR` with:
 
-## Local run
+- Unity project structure at the repository root
+- Quest-oriented runtime motion analysis in `Assets/CriticalVR/Scripts/Runtime`
+- URP full-screen effect support in `Assets/CriticalVR/Scripts/Rendering`
+- deployment and setup documentation in `Docs/Quest`
+- editor bootstrap tooling to create a starting scene and material
 
-Prerequisites:
-- Node.js
+Open the repository itself as a Unity project.
 
-Start locally with one of these:
+## Repository Layout
 
-```bash
-python run_local.py
-```
+- `Assets/`
+  Unity runtime scripts, rendering scripts, shaders, and generated bootstrap scene/materials
+- `Packages/`
+  Unity package manifest centered on URP, Input System, XR Management, and OpenXR
+- `ProjectSettings/`
+  Unity project settings for Quest-oriented Android setup
+- `Docs/Quest/`
+  Quest deployment guide, shader guide, build/install notes, and readiness checklists
+- `Docs/Architecture/`
+  repository structure notes, reference-research summary, and capability gap analysis
+- `Tools/`
+  helper scripts including ADB install and the desktop web simulator
+- `Tools/WebSimulator/`
+  reference-only React/Vite simulator for motion tuning before headset testing
 
-or:
+## Start Here
 
-```bat
-run_local.bat
-```
+1. Read [`Docs/Quest/SetupGuide.md`](./Docs/Quest/SetupGuide.md)
+2. Run the Unity bootstrap menu items described there
+3. Import the Meta XR / Oculus packages in Unity
+4. Replace the preview camera setup with `OVRCameraRig`
+5. Add the full-screen renderer feature and effect material
+6. Build for Android and install on Quest
 
-The app runs at [http://localhost:3000](http://localhost:3000).
+## What Is Ready In Repo
 
-## Desktop simulator controls
+- Quest-oriented motion runtime with subtle activation and release timing
+- material-driven layer outputs for distortion, patterning, color atmosphere, breathing, overdrive, and intro fade
+- a URP full-screen renderer feature script
+- a production-targeted effect shader
+- a Unity editor bootstrap tool for scene/material/project setup
+- deployment checklists and install helpers
 
-- Move the mouse to simulate headset motion when `Debug slider` is off
-- Use the `Debug slider` to test intensity without live motion
-- Press `Space`, `B`, or `Y` for emergency reset
-- Toggle the camera button to use webcam passthrough-like background input
+## What Is Still Manual In Unity
 
-## Installed and added skills
+- importing Meta XR / Oculus Integration packages
+- switching the placeholder preview rig to `OVRCameraRig`
+- enabling Passthrough on `OVRManager` and adding `OVRPassthroughLayer`
+- creating or assigning the URP renderer data asset and attaching the renderer feature
+- verifying Quest-specific OpenXR / Meta XR plugin toggles in the Editor
 
-Installed into `~/.codex/skills`:
-- `develop-web-game`
-- `game-developer-skill`
-- `csharp-developer-skill`
+## Desktop Simulator
 
-Added to this project:
-- [`skills/meta-quest-xr`](./skills/meta-quest-xr)
+The browser app under [`Tools/WebSimulator`](./Tools/WebSimulator) is a support simulator only. It mirrors the motion logic and transition feel, but it is not the shipping product path.
 
-The new `meta-quest-xr` skill captures:
-- Meta Quest setup expectations
-- Passthrough composition constraints
-- Motion analysis patterns
-- Comfort and safety rules for XR visuals
+## Research References
 
-## Notes
-
-This repository is not a full Unity project export. It is a working simulator plus Unity-side implementation assets and guidance for the Quest build.
+External patterns reviewed and adapted are summarized in [`Docs/Architecture/ReferenceResearch.md`](./Docs/Architecture/ReferenceResearch.md).
