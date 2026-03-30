@@ -1,0 +1,4 @@
+interface:
+  display_name: "Meta Quest XR"
+  short_description: "Build Unity XR apps for Meta Quest."
+  default_prompt: "Use $meta-quest-xr to build or refine a Unity Meta Quest XR experience."
