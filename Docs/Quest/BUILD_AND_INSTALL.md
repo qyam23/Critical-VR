@@ -12,6 +12,43 @@ Recommended output path:
 
 `Builds/Android/CriticalVR.apk`
 
+## Repeatable Local Automation
+
+Validation only:
+
+```bat
+Tools\validate_quest_project.bat
+```
+
+The helper fails fast if:
+
+- another Unity editor instance still has the project open
+- Android Build Support is not available in the detected Unity editor
+
+Development build:
+
+```bat
+Tools\build_quest.bat
+```
+
+Release build:
+
+```bat
+Tools\build_quest.bat --release
+```
+
+Build and install to headset:
+
+```bat
+Tools\build_and_install_quest.bat
+```
+
+Pull latest, build, and install:
+
+```bat
+Tools\build_and_install_quest.bat --pull
+```
+
 ## ADB Install
 
 Use the included helper:
@@ -26,6 +63,15 @@ What it does:
 - checks that `adb` is available
 - waits for a device
 - runs `adb install -r`
+
+`Tools\build_and_install_quest.bat` goes further:
+
+- optional `git pull --ff-only`
+- Unity validation
+- Unity batch build
+- adb device detection
+- adb reinstall
+- app launch attempt
 
 ## Quick Debug Commands
 
@@ -45,3 +91,4 @@ Check these first:
 - effect material is assigned to both the renderer feature and the runtime script
 - `CenterEyeAnchor` points to the imported `OVRCameraRig` eye anchor
 - Meta XR plugin settings are enabled for Android
+- `Docs/Quest/ValidationReport.latest.md` does not contain blocking Meta XR findings

@@ -1,32 +1,35 @@
 #if UNITY_EDITOR
+using System;
 using System.IO;
+using System.Reflection;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.SceneManagement;
+using UnityEditor.XR.Management;
+using UnityEditor.XR.Management.Metadata;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
+using UnityEngine.XR.Management;
+using UnityEngine.XR.OpenXR;
 
 namespace CriticalVR.EditorTools
 {
     public static class CriticalVRProjectBootstrap
     {
-        private const string MaterialPath = "Assets/CriticalVR/Resources/Materials/CriticalVRPassthroughTrip.mat";
-        private const string ScenePath = "Assets/CriticalVR/Scenes/CriticalVR_QuestBootstrap.unity";
-        private const string ShaderPath = "CriticalVR/PassthroughTrip";
+        private const string OpenXRLoaderTypeName = "UnityEngine.XR.OpenXR.OpenXRLoader";
 
         [MenuItem("CriticalVR/Bootstrap/Run Full Quest Bootstrap")]
         public static void RunFullBootstrap()
         {
-            ConfigureProjectSettings();
-            CreateBootstrapAssets();
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-            Debug.Log("Critical-VR bootstrap completed. Import Meta XR packages next, then swap the preview rig for OVRCameraRig.");
+            EnsureQuestProjectScaffold();
+            Debug.Log("Critical-VR bootstrap completed. Run validation next, then import Meta XR packages and replace the preview rig with OVRCameraRig.");
         }
 
         public static void RunFromBatchMode()
         {
-            RunFullBootstrap();
+            EnsureQuestProjectScaffold();
             EditorApplication.Exit(0);
         }
 
@@ -50,13 +53,210 @@ namespace CriticalVR.EditorTools
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan, GraphicsDeviceType.OpenGLES3 });
         }
 
-        [MenuItem("CriticalVR/Bootstrap/Create Scene And Material")]
-        public static void CreateBootstrapAssets()
+        [MenuItem("CriticalVR/Bootstrap/Create Or Repair Quest Assets")]
+        public static void CreateOrRepairBootstrapAssets()
         {
+            EnsureQuestProjectScaffold();
+        }
+
+        [MenuItem("CriticalVR/Bootstrap/Recreate Preview Scene")]
+        public static void RecreatePreviewScene()
+        {
+            EnsureFolders();
+            Material material = EnsureMaterial();
+            CreateOrRepairRenderPipelineAssets(material);
+            CreateSceneAsset(material, recreateScene: true);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+        }
+
+        internal static void EnsureQuestProjectScaffold()
+        {
+            ConfigureProjectSettings();
             EnsureFolders();
 
             Material material = EnsureMaterial();
+            CreateOrRepairRenderPipelineAssets(material);
+            EnsureXRSettings();
+            CreateSceneAsset(material, recreateScene: false);
 
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+        }
+
+        private static void EnsureFolders()
+        {
+            string[] folders =
+            {
+                "Assets/CriticalVR",
+                "Assets/CriticalVR/Scenes",
+                "Assets/CriticalVR/Resources",
+                "Assets/CriticalVR/Resources/Materials",
+                "Assets/CriticalVR/Settings",
+                CriticalVRProjectPaths.RenderingSettingsFolder,
+            };
+
+            foreach (string folder in folders)
+            {
+                if (!AssetDatabase.IsValidFolder(folder))
+                {
+                    Directory.CreateDirectory(folder);
+                }
+            }
+        }
+
+        private static Material EnsureMaterial()
+        {
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(CriticalVRProjectPaths.MaterialPath);
+            if (material != null)
+            {
+                return material;
+            }
+
+            Shader shader = Shader.Find(CriticalVRProjectPaths.ShaderPath);
+            if (shader == null)
+            {
+                throw new FileNotFoundException($"Shader '{CriticalVRProjectPaths.ShaderPath}' not found. Import scripts and shader assets before bootstrapping.");
+            }
+
+            material = new Material(shader);
+            AssetDatabase.CreateAsset(material, CriticalVRProjectPaths.MaterialPath);
+            return material;
+        }
+
+        private static void CreateOrRepairRenderPipelineAssets(Material material)
+        {
+            UniversalRendererData rendererData = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(CriticalVRProjectPaths.RendererDataPath);
+            if (rendererData == null)
+            {
+                rendererData = ScriptableObject.CreateInstance<UniversalRendererData>();
+                AssetDatabase.CreateAsset(rendererData, CriticalVRProjectPaths.RendererDataPath);
+            }
+
+            EnsureRendererFeature(rendererData, material);
+
+            UniversalRenderPipelineAsset pipelineAsset = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(CriticalVRProjectPaths.PipelineAssetPath);
+            if (pipelineAsset == null)
+            {
+                pipelineAsset = UniversalRenderPipelineAsset.Create(rendererData);
+                AssetDatabase.CreateAsset(pipelineAsset, CriticalVRProjectPaths.PipelineAssetPath);
+            }
+            else
+            {
+                SerializedObject serializedPipeline = new SerializedObject(pipelineAsset);
+                SerializedProperty rendererDataList = serializedPipeline.FindProperty("m_RendererDataList");
+                if (rendererDataList != null && rendererDataList.arraySize > 0)
+                {
+                    rendererDataList.GetArrayElementAtIndex(0).objectReferenceValue = rendererData;
+                    serializedPipeline.ApplyModifiedPropertiesWithoutUndo();
+                }
+            }
+
+            pipelineAsset.supportsCameraDepthTexture = true;
+            pipelineAsset.supportsCameraOpaqueTexture = true;
+            pipelineAsset.supportsHDR = false;
+            pipelineAsset.msaaSampleCount = 1;
+            pipelineAsset.renderScale = 1f;
+
+            EditorUtility.SetDirty(rendererData);
+            EditorUtility.SetDirty(pipelineAsset);
+            GraphicsSettings.defaultRenderPipeline = pipelineAsset;
+        }
+
+        private static void EnsureRendererFeature(UniversalRendererData rendererData, Material material)
+        {
+            CriticalVR.Rendering.CriticalVRFullscreenRendererFeature feature = null;
+            foreach (var candidate in rendererData.rendererFeatures)
+            {
+                if (candidate is CriticalVR.Rendering.CriticalVRFullscreenRendererFeature matched)
+                {
+                    feature = matched;
+                    break;
+                }
+            }
+
+            if (feature == null)
+            {
+                feature = ScriptableObject.CreateInstance<CriticalVR.Rendering.CriticalVRFullscreenRendererFeature>();
+                feature.name = "CriticalVR Fullscreen Renderer Feature";
+                AssetDatabase.AddObjectToAsset(feature, rendererData);
+                rendererData.rendererFeatures.Add(feature);
+            }
+
+            SerializedObject featureSerializedObject = new SerializedObject(feature);
+            SerializedProperty settingsProperty = featureSerializedObject.FindProperty("settings");
+            settingsProperty.FindPropertyRelative("material").objectReferenceValue = material;
+            settingsProperty.FindPropertyRelative("injectionPoint").enumValueIndex = (int)RenderPassEvent.AfterRenderingTransparents;
+            featureSerializedObject.ApplyModifiedPropertiesWithoutUndo();
+
+            MethodInfo validateMethod = typeof(ScriptableRendererData).GetMethod("ValidateRendererFeatures", BindingFlags.Instance | BindingFlags.NonPublic);
+            validateMethod?.Invoke(rendererData, null);
+            rendererData.SetDirty();
+        }
+
+        private static void EnsureXRSettings()
+        {
+            MethodInfo getOrCreateMethod = typeof(XRGeneralSettingsPerBuildTarget).GetMethod("GetOrCreate", BindingFlags.Static | BindingFlags.NonPublic);
+            XRGeneralSettingsPerBuildTarget generalSettings = getOrCreateMethod?.Invoke(null, null) as XRGeneralSettingsPerBuildTarget;
+            if (generalSettings == null)
+            {
+                throw new BuildFailedException("Unable to create XRGeneralSettingsPerBuildTarget asset.");
+            }
+            if (!generalSettings.HasSettingsForBuildTarget(BuildTargetGroup.Android))
+            {
+                generalSettings.CreateDefaultSettingsForBuildTarget(BuildTargetGroup.Android);
+            }
+
+            XRGeneralSettings androidSettings = generalSettings.SettingsForBuildTarget(BuildTargetGroup.Android);
+            if (androidSettings != null)
+            {
+                androidSettings.InitManagerOnStart = true;
+            }
+
+            if (!generalSettings.HasManagerSettingsForBuildTarget(BuildTargetGroup.Android))
+            {
+                generalSettings.CreateDefaultManagerSettingsForBuildTarget(BuildTargetGroup.Android);
+            }
+
+            XRManagerSettings managerSettings = generalSettings.ManagerSettingsForBuildTarget(BuildTargetGroup.Android);
+            if (managerSettings != null)
+            {
+                XRPackageMetadataStore.AssignLoader(managerSettings, OpenXRLoaderTypeName, BuildTargetGroup.Android);
+            }
+
+            EnsureOpenXRPackageSettings();
+        }
+
+        private static void EnsureOpenXRPackageSettings()
+        {
+            Type packageSettingsType = CriticalVRProjectPaths.FindType("UnityEditor.XR.OpenXR.OpenXRPackageSettings");
+            MethodInfo getOrCreateInstance = packageSettingsType?.GetMethod("GetOrCreateInstance", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            object packageSettings = getOrCreateInstance?.Invoke(null, null);
+            MethodInfo getSettingsMethod = packageSettingsType?.GetMethod("GetSettingsForBuildTargetGroup", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            getSettingsMethod?.Invoke(packageSettings, new object[] { BuildTargetGroup.Android });
+
+            if (packageSettings is UnityEngine.Object packageSettingsObject)
+            {
+                EditorUtility.SetDirty(packageSettingsObject);
+                AssetDatabase.SaveAssets();
+            }
+        }
+
+        private static void CreateSceneAsset(Material material, bool recreateScene)
+        {
+            if (recreateScene || !File.Exists(CriticalVRProjectPaths.ToAbsolutePath(CriticalVRProjectPaths.ScenePath)))
+            {
+                CreateNewScene(material);
+                return;
+            }
+
+            Scene scene = EditorSceneManager.OpenScene(CriticalVRProjectPaths.ScenePath, OpenSceneMode.Single);
+            RepairScene(scene, material);
+            EditorSceneManager.SaveScene(scene, CriticalVRProjectPaths.ScenePath);
+        }
+
+        private static void CreateNewScene(Material material)
+        {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
             scene.name = "CriticalVR_QuestBootstrap";
 
@@ -81,8 +281,69 @@ namespace CriticalVR.EditorTools
             mainCamera.nearClipPlane = 0.01f;
             mainCamera.farClipPlane = 1000f;
 
-            GameObject previewQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            previewQuad.name = "CriticalVRPreviewOverlay";
+            EnsurePreviewOverlay(mainCamera, material);
+            AssignManagerReferences(manager, mainCamera.transform, material);
+
+            Light sceneLight = UnityEngine.Object.FindFirstObjectByType<Light>();
+            if (sceneLight != null)
+            {
+                sceneLight.type = LightType.Directional;
+                sceneLight.intensity = 0.2f;
+                sceneLight.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            }
+
+            EditorSceneManager.SaveScene(scene, CriticalVRProjectPaths.ScenePath);
+            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(CriticalVRProjectPaths.ScenePath, true) };
+        }
+
+        private static void RepairScene(Scene scene, Material material)
+        {
+            MotionToExperienceManager manager = UnityEngine.Object.FindFirstObjectByType<MotionToExperienceManager>();
+            if (manager == null)
+            {
+                GameObject root = GameObject.Find("CriticalVRExperienceRoot") ?? new GameObject("CriticalVRExperienceRoot");
+                manager = root.GetComponent<MotionToExperienceManager>() ?? root.AddComponent<MotionToExperienceManager>();
+            }
+
+            Transform centerEye = FindCenterEyeAnchor();
+            if (centerEye == null)
+            {
+                GameObject previewRig = GameObject.Find("XROriginPreview") ?? new GameObject("XROriginPreview");
+                Camera mainCamera = Camera.main;
+                if (mainCamera == null)
+                {
+                    GameObject cameraObject = new("Main Camera");
+                    mainCamera = cameraObject.AddComponent<Camera>();
+                    cameraObject.tag = "MainCamera";
+                }
+
+                mainCamera.transform.SetParent(previewRig.transform, false);
+                mainCamera.name = "CenterEyeAnchorPreview";
+                mainCamera.clearFlags = CameraClearFlags.SolidColor;
+                mainCamera.backgroundColor = Color.black;
+                mainCamera.nearClipPlane = 0.01f;
+                mainCamera.farClipPlane = 1000f;
+                centerEye = mainCamera.transform;
+                EnsurePreviewOverlay(mainCamera, material);
+            }
+
+            AssignManagerReferences(manager, centerEye, material);
+
+            if (EditorBuildSettings.scenes.Length == 0 || EditorBuildSettings.scenes[0].path != CriticalVRProjectPaths.ScenePath)
+            {
+                EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(CriticalVRProjectPaths.ScenePath, true) };
+            }
+        }
+
+        private static void EnsurePreviewOverlay(Camera mainCamera, Material material)
+        {
+            GameObject previewQuad = GameObject.Find("CriticalVRPreviewOverlay");
+            if (previewQuad == null)
+            {
+                previewQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                previewQuad.name = "CriticalVRPreviewOverlay";
+            }
+
             previewQuad.transform.SetParent(mainCamera.transform, false);
             previewQuad.transform.localPosition = new Vector3(0f, 0f, 0.75f);
             previewQuad.transform.localScale = new Vector3(1.6f, 0.9f, 1f);
@@ -94,60 +355,35 @@ namespace CriticalVR.EditorTools
                 meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
                 meshRenderer.receiveShadows = false;
             }
+        }
 
+        private static void AssignManagerReferences(MotionToExperienceManager manager, Transform centerEyeAnchor, Material material)
+        {
             SerializedObject serializedManager = new(manager);
-            serializedManager.FindProperty("centerEyeAnchor").objectReferenceValue = mainCamera.transform;
+            serializedManager.FindProperty("centerEyeAnchor").objectReferenceValue = centerEyeAnchor;
             serializedManager.FindProperty("effectMaterial").objectReferenceValue = material;
             serializedManager.ApplyModifiedPropertiesWithoutUndo();
-
-            Light sceneLight = Object.FindFirstObjectByType<Light>();
-            if (sceneLight != null)
-            {
-                sceneLight.type = LightType.Directional;
-                sceneLight.intensity = 0.2f;
-                sceneLight.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
-            }
-
-            EditorSceneManager.SaveScene(scene, ScenePath);
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+            EditorUtility.SetDirty(manager);
         }
 
-        private static void EnsureFolders()
+        private static Transform FindCenterEyeAnchor()
         {
-            string[] folders =
+            string[] candidateNames =
             {
-                "Assets/CriticalVR",
-                "Assets/CriticalVR/Scenes",
-                "Assets/CriticalVR/Resources",
-                "Assets/CriticalVR/Resources/Materials",
+                "CenterEyeAnchor",
+                "CenterEyeAnchorPreview",
             };
 
-            foreach (string folder in folders)
+            foreach (string candidate in candidateNames)
             {
-                if (!AssetDatabase.IsValidFolder(folder))
+                GameObject match = GameObject.Find(candidate);
+                if (match != null)
                 {
-                    Directory.CreateDirectory(folder);
+                    return match.transform;
                 }
             }
-        }
 
-        private static Material EnsureMaterial()
-        {
-            Material material = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
-            if (material != null)
-            {
-                return material;
-            }
-
-            Shader shader = Shader.Find(ShaderPath);
-            if (shader == null)
-            {
-                throw new FileNotFoundException($"Shader '{ShaderPath}' not found. Import scripts and shader assets before bootstrapping.");
-            }
-
-            material = new Material(shader);
-            AssetDatabase.CreateAsset(material, MaterialPath);
-            return material;
+            return Camera.main != null ? Camera.main.transform : null;
         }
     }
 }

@@ -46,13 +46,18 @@ Still manual:
 3. In the top menu run:
    `CriticalVR > Bootstrap > Run Full Quest Bootstrap`
 
-That bootstrap does three things:
+That bootstrap now does the following:
 
 - switches the project to `Android`
 - configures Quest-oriented Android player settings
-- creates:
+- creates or repairs:
   - `Assets/CriticalVR/Scenes/CriticalVR_QuestBootstrap.unity`
   - `Assets/CriticalVR/Resources/Materials/CriticalVRPassthroughTrip.mat`
+  - `Assets/CriticalVR/Settings/Rendering/CriticalVR_Renderer.asset`
+  - `Assets/CriticalVR/Settings/Rendering/CriticalVR_URP.asset`
+- assigns the URP pipeline asset in `GraphicsSettings`
+- adds the `CriticalVRFullscreenRendererFeature` to the renderer data
+- creates Android XR management settings and assigns the OpenXR loader
 
 The bootstrap scene starts with a preview camera rig placeholder so the repository opens cleanly before Meta packages are imported.
 
@@ -60,15 +65,18 @@ The bootstrap scene starts with a preview camera rig placeholder so the reposito
 
 You must still create or confirm the URP assets inside the Unity Editor.
 
-1. Create a `URP Pipeline Asset` and `Renderer Data` asset if they are not already present.
-2. Assign the URP pipeline asset in:
-   `Project Settings > Graphics`
-3. Also assign it in:
-   `Project Settings > Quality`
-4. In the active URP renderer:
-   - enable `Opaque Texture`
-   - enable `Depth Texture`
-   - keep the project `Linear` color space
+The repository bootstrap already creates the pipeline asset and renderer data for you.
+
+You should verify in the Editor:
+
+1. `Project Settings > Graphics` points to:
+   `Assets/CriticalVR/Settings/Rendering/CriticalVR_URP.asset`
+2. the active renderer data contains:
+   `CriticalVRFullscreenRendererFeature`
+3. the pipeline asset still has:
+   - `Opaque Texture`
+   - `Depth Texture`
+   - `Linear` color space
 
 ## Vulkan-First Recommendation
 
@@ -120,12 +128,17 @@ This script already includes:
 
 Production path:
 
-1. Open the active URP `Renderer Data` asset
-2. Add Renderer Feature:
+The bootstrap now attempts to do this automatically.
+
+Verify:
+
+1. Open:
+   `Assets/CriticalVR/Settings/Rendering/CriticalVR_Renderer.asset`
+2. Confirm Renderer Feature:
    `CriticalVRFullscreenRendererFeature`
-3. Assign the same material:
-   `CriticalVRPassthroughTrip.mat`
-4. Use injection point:
+3. Confirm material:
+   `Assets/CriticalVR/Resources/Materials/CriticalVRPassthroughTrip.mat`
+4. Confirm injection point:
    `After Rendering Transparents`
 
 Why this is the main path:
@@ -179,6 +192,27 @@ Expected result:
 - installs it to the connected headset
 - launches it on device
 
+## Validation Before Build
+
+In Unity:
+
+- run `CriticalVR > Validation > Run Quest Validation`
+
+From the PC:
+
+```bat
+Tools\validate_quest_project.bat
+```
+
+This writes:
+
+- `Docs/Quest/ValidationReport.latest.md`
+
+The batch helper also guards against two common local blockers:
+
+- the project still being open in another Unity editor session
+- missing Android Build Support in the detected Unity editor
+
 ## APK Generation Path
 
 If you want the APK without immediate install:
@@ -192,6 +226,7 @@ If you want the APK without immediate install:
 If Unity build succeeds but install fails, use:
 
 - [`Tools/install_apk.bat`](../../Tools/install_apk.bat)
+- [`Tools/build_and_install_quest.bat`](../../Tools/build_and_install_quest.bat)
 
 Example:
 
@@ -204,6 +239,20 @@ Manual fallback:
 ```bat
 adb devices
 adb install -r Builds\Android\CriticalVR.apk
+```
+
+Preferred repeatable local automation:
+
+```bat
+Tools\build_and_install_quest.bat
+```
+
+Useful options:
+
+```bat
+Tools\build_and_install_quest.bat --pull
+Tools\build_and_install_quest.bat --release
+Tools\build_and_install_quest.bat --skip-build
 ```
 
 ## First-Launch Debugging Notes
@@ -222,7 +271,6 @@ Use these checks first:
 These cannot be fully solved by repository editing alone:
 
 - import Meta XR / Oculus Integration package set
-- create or confirm the URP renderer asset and add the renderer feature to it
 - replace the placeholder preview rig with `OVRCameraRig`
 - assign `CenterEyeAnchor` from the imported Meta rig
 - enable passthrough and confirm headset-specific plugin settings

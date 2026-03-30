@@ -35,3 +35,5 @@ output/
 
 Tools/WebSimulator/dist/
 Tools/WebSimulator/node_modules/
+Assets/Resources/PerformanceTestRunInfo.json
+Assets/Resources/PerformanceTestRunSettings.json

@@ -34,11 +34,11 @@ Open the repository itself as a Unity project.
 ## Start Here
 
 1. Read [`Docs/Quest/SetupGuide.md`](./Docs/Quest/SetupGuide.md)
-2. Run the Unity bootstrap menu items described there
+2. Run `CriticalVR > Bootstrap > Run Full Quest Bootstrap`
 3. Import the Meta XR / Oculus packages in Unity
 4. Replace the preview camera setup with `OVRCameraRig`
-5. Add the full-screen renderer feature and effect material
-6. Build for Android and install on Quest
+5. Run `CriticalVR > Validation > Run Quest Validation`
+6. Build from Unity or use [`Tools/build_and_install_quest.bat`](./Tools/build_and_install_quest.bat)
 
 ## What Is Ready In Repo
 
@@ -47,14 +47,30 @@ Open the repository itself as a Unity project.
 - a URP full-screen renderer feature script
 - a production-targeted effect shader
 - a Unity editor bootstrap tool for scene/material/project setup
+- a Unity validation tool with report output
+- local batch build automation
+- local PC-to-Quest build and install automation
 - deployment checklists and install helpers
+
+## Fast Commands
+
+- Validate from PC:
+  `Tools\validate_quest_project.bat`
+- Build development APK:
+  `Tools\build_quest.bat`
+- Build release APK:
+  `Tools\build_quest.bat --release`
+- Build and install to Quest:
+  `Tools\build_and_install_quest.bat`
+- Pull, build, and install to Quest:
+  `Tools\build_and_install_quest.bat --pull`
 
 ## What Is Still Manual In Unity
 
 - importing Meta XR / Oculus Integration packages
 - switching the placeholder preview rig to `OVRCameraRig`
 - enabling Passthrough on `OVRManager` and adding `OVRPassthroughLayer`
-- creating or assigning the URP renderer data asset and attaching the renderer feature
+- replacing the preview CenterEyeAnchor reference with the real Quest eye anchor
 - verifying Quest-specific OpenXR / Meta XR plugin toggles in the Editor
 
 ## Desktop Simulator

@@ -7,7 +7,7 @@
 - `Assets/CriticalVR/Scripts/Rendering`
   URP full-screen renderer feature
 - `Assets/CriticalVR/Scripts/Editor`
-  project bootstrap and scene/material creation
+  project bootstrap, validation, and build automation
 - `Assets/CriticalVR/Shaders`
   production effect shader
 - `Assets/CriticalVR/Scenes`
@@ -29,6 +29,8 @@
 
 ## Support Only
 
+- `Tools/`
+  Windows helpers for validation, build, and Quest install plus the support simulator
 - `Tools/WebSimulator/`
   desktop tuning simulator and browser reference
 - `skills/`
