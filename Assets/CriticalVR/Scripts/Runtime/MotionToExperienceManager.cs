@@ -1,7 +1,9 @@
-using System;
 using System.Collections;
-using System.Reflection;
 using UnityEngine;
+using UnityEngine.XR;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 /// <summary>
 /// Converts headset motion into a comfort-aware intensity model for Quest passthrough effects.
@@ -125,6 +127,7 @@ public class MotionToExperienceManager : MonoBehaviour
     private bool _isResetting;
     private bool _experienceActive;
     private bool _hasBeenIntense;
+    private bool _secondaryWasPressed;
     private ExperienceState _currentState = ExperienceState.Calm;
 
     public float IntensityScore => _intensityScore;
@@ -188,6 +191,7 @@ public class MotionToExperienceManager : MonoBehaviour
 
         if (_introFade > 0f)
         {
+            RebaseMotion();
             _smoothedMotion = Mathf.Lerp(_smoothedMotion, 0f, 1f - Mathf.Exp(-4f * dt));
             _motionHistory = Mathf.Lerp(_motionHistory, 0f, 1f - Mathf.Exp(-3f * dt));
             _burstEnergy = Mathf.Lerp(_burstEnergy, 0f, 1f - Mathf.Exp(-4f * dt));
@@ -266,7 +270,7 @@ public class MotionToExperienceManager : MonoBehaviour
 
         _intensityScore *= Mathf.Exp(-(baseDecayRate * decayScale) * dt);
 
-        if (_intensityScore >= 0.78f)
+        if (rawMotion >= 0.78f && _intensityScore >= 0.78f)
         {
             _peakHoldTimer = intenseHoldDuration;
             _hasBeenIntense = true;
@@ -377,7 +381,12 @@ public class MotionToExperienceManager : MonoBehaviour
         bool resetPressed = false;
 
         #if UNITY_EDITOR
+        #if ENABLE_INPUT_SYSTEM
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null && (keyboard.spaceKey.wasPressedThisFrame || keyboard.bKey.wasPressedThisFrame || keyboard.yKey.wasPressedThisFrame))
+        #else
         if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.B) || Input.GetKeyDown(KeyCode.Y))
+        #endif
         {
             resetPressed = true;
         }
@@ -385,7 +394,9 @@ public class MotionToExperienceManager : MonoBehaviour
 
         if (!resetPressed)
         {
-            resetPressed = TryGetMetaControllerReset();
+            bool secondaryPressed = SecondaryPressed(XRNode.LeftHand) || SecondaryPressed(XRNode.RightHand);
+            resetPressed = secondaryPressed && !_secondaryWasPressed;
+            _secondaryWasPressed = secondaryPressed;
         }
 
         if (resetPressed && !_isResetting)
@@ -396,6 +407,7 @@ public class MotionToExperienceManager : MonoBehaviour
 
     public void ResetExperience()
     {
+        useDebugSlider = false;
         StopAllCoroutines();
         StartCoroutine(FadeOutRoutine());
     }
@@ -463,6 +475,7 @@ public class MotionToExperienceManager : MonoBehaviour
         _hasBeenIntense = false;
         _currentState = ExperienceState.Calm;
 
+        RebaseMotion();
         _sampleCount = 0;
         _sampleIndex = 0;
         _sampleSum = 0f;
@@ -503,61 +516,23 @@ public class MotionToExperienceManager : MonoBehaviour
         return ExpLerp(current, target, speed, dt);
     }
 
-    private bool TryGetMetaControllerReset()
+    private static bool SecondaryPressed(XRNode hand)
     {
-        try
-        {
-            Type ovrInputType = FindType("OVRInput");
-            if (ovrInputType == null)
-            {
-                return false;
-            }
-
-            Type controllerEnum = ovrInputType.GetNestedType("Controller", BindingFlags.Public);
-            Type buttonEnum = ovrInputType.GetNestedType("Button", BindingFlags.Public);
-            if (controllerEnum == null || buttonEnum == null)
-            {
-                return false;
-            }
-
-            MethodInfo getActiveController = ovrInputType.GetMethod("GetActiveController", BindingFlags.Public | BindingFlags.Static);
-            MethodInfo getDown = ovrInputType.GetMethod("GetDown", BindingFlags.Public | BindingFlags.Static, null, new[] { buttonEnum }, null);
-            if (getActiveController == null || getDown == null)
-            {
-                return false;
-            }
-
-            object noneController = Enum.Parse(controllerEnum, "None");
-            object activeController = getActiveController.Invoke(null, null);
-            if (activeController == null || activeController.Equals(noneController))
-            {
-                return false;
-            }
-
-            object buttonTwo = Enum.Parse(buttonEnum, "Two");
-            object buttonFour = Enum.Parse(buttonEnum, "Four");
-            bool pressedTwo = (bool)getDown.Invoke(null, new[] { buttonTwo });
-            bool pressedFour = (bool)getDown.Invoke(null, new[] { buttonFour });
-            return pressedTwo || pressedFour;
-        }
-        catch
-        {
-            return false;
-        }
+        InputDevice device = InputDevices.GetDeviceAtXRNode(hand);
+        return device.isValid && device.TryGetFeatureValue(CommonUsages.secondaryButton, out bool pressed) && pressed;
     }
 
-    private static Type FindType(string typeName)
+    private void RebaseMotion()
     {
-        foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            Type type = assembly.GetType(typeName);
-            if (type != null)
-            {
-                return type;
-            }
-        }
+        if (centerEyeAnchor == null) return;
+        _lastPosition = centerEyeAnchor.position;
+        _lastRotation = centerEyeAnchor.rotation;
+        _lastVelocity = Vector3.zero;
+    }
 
-        return null;
+    private void OnApplicationFocus(bool focused)
+    {
+        if (focused) RebaseMotion();
     }
 
     [ContextMenu("Trigger Reset")]

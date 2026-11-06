@@ -30,7 +30,8 @@ Shader "CriticalVR/PassthroughTrip"
         Tags { "RenderType"="Transparent" "RenderPipeline"="UniversalRenderPipeline" "Queue"="Transparent" }
         ZWrite Off
         Cull Off
-        Blend SrcAlpha OneMinusSrcAlpha
+        Blend Off
+        ZTest Always
 
         Pass
         {
@@ -41,19 +42,7 @@ Shader "CriticalVR/PassthroughTrip"
             #pragma fragment Frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            struct Attributes
-            {
-                uint vertexID : SV_VertexID;
-            };
-
-            struct Varyings
-            {
-                float4 positionCS : SV_POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            TEXTURE2D_X(_CameraOpaqueTexture);
-            SAMPLER(sampler_CameraOpaqueTexture);
+            #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
                 float _IntensityScore;
@@ -77,14 +66,6 @@ Shader "CriticalVR/PassthroughTrip"
                 float4 _EdgeColor;
                 float4 _AtmosphereColor;
             CBUFFER_END
-
-            Varyings Vert(Attributes input)
-            {
-                Varyings output;
-                output.uv = GetFullScreenTriangleTexCoord(input.vertexID);
-                output.positionCS = GetFullScreenTriangleVertexPosition(input.vertexID);
-                return output;
-            }
 
             float Luminance(float3 color)
             {
@@ -112,15 +93,15 @@ Shader "CriticalVR/PassthroughTrip"
 
             float EdgeStrength(float2 uv)
             {
-                float2 texel = _ScreenParams.zw;
-                float lum00 = Luminance(SAMPLE_TEXTURE2D_X(_CameraOpaqueTexture, sampler_CameraOpaqueTexture, uv + texel * float2(-1, -1)).rgb);
-                float lum10 = Luminance(SAMPLE_TEXTURE2D_X(_CameraOpaqueTexture, sampler_CameraOpaqueTexture, uv + texel * float2( 0, -1)).rgb);
-                float lum20 = Luminance(SAMPLE_TEXTURE2D_X(_CameraOpaqueTexture, sampler_CameraOpaqueTexture, uv + texel * float2( 1, -1)).rgb);
-                float lum01 = Luminance(SAMPLE_TEXTURE2D_X(_CameraOpaqueTexture, sampler_CameraOpaqueTexture, uv + texel * float2(-1,  0)).rgb);
-                float lum21 = Luminance(SAMPLE_TEXTURE2D_X(_CameraOpaqueTexture, sampler_CameraOpaqueTexture, uv + texel * float2( 1,  0)).rgb);
-                float lum02 = Luminance(SAMPLE_TEXTURE2D_X(_CameraOpaqueTexture, sampler_CameraOpaqueTexture, uv + texel * float2(-1,  1)).rgb);
-                float lum12 = Luminance(SAMPLE_TEXTURE2D_X(_CameraOpaqueTexture, sampler_CameraOpaqueTexture, uv + texel * float2( 0,  1)).rgb);
-                float lum22 = Luminance(SAMPLE_TEXTURE2D_X(_CameraOpaqueTexture, sampler_CameraOpaqueTexture, uv + texel * float2( 1,  1)).rgb);
+                float2 texel = _BlitTexture_TexelSize.xy;
+                float lum00 = Luminance(SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv + texel * float2(-1, -1)).rgb);
+                float lum10 = Luminance(SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv + texel * float2( 0, -1)).rgb);
+                float lum20 = Luminance(SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv + texel * float2( 1, -1)).rgb);
+                float lum01 = Luminance(SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv + texel * float2(-1,  0)).rgb);
+                float lum21 = Luminance(SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv + texel * float2( 1,  0)).rgb);
+                float lum02 = Luminance(SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv + texel * float2(-1,  1)).rgb);
+                float lum12 = Luminance(SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv + texel * float2( 0,  1)).rgb);
+                float lum22 = Luminance(SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv + texel * float2( 1,  1)).rgb);
 
                 float sobelX = lum20 + (2.0 * lum21) + lum22 - lum00 - (2.0 * lum01) - lum02;
                 float sobelY = lum02 + (2.0 * lum12) + lum22 - lum00 - (2.0 * lum10) - lum20;
@@ -137,7 +118,8 @@ Shader "CriticalVR/PassthroughTrip"
 
             half4 Frag(Varyings input) : SV_Target
             {
-                float2 uv = input.uv;
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+                float2 uv = input.texcoord;
                 float peripheralMask = PeripheralMask(uv);
                 float breathingWave = sin(_BreathingPhase + peripheralMask * 2.6) * 0.5 + 0.5;
 
@@ -150,14 +132,14 @@ Shader "CriticalVR/PassthroughTrip"
                 float2 distortionOffset = radialDir * wobble * float2(1.0, 0.82);
 
                 float edge = EdgeStrength(uv + distortionOffset);
-                float3 baseColor = SAMPLE_TEXTURE2D_X(_CameraOpaqueTexture, sampler_CameraOpaqueTexture, uv + distortionOffset).rgb;
+                float3 baseColor = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv + distortionOffset).rgb;
                 float luminance = Luminance(baseColor);
 
                 float highlightMask = saturate((luminance - 0.55) * 2.4) * peripheralMask;
                 float2 chromaOffset = radialDir * (_ChromaticAmount * (0.35 + highlightMask));
-                float red = SAMPLE_TEXTURE2D_X(_CameraOpaqueTexture, sampler_CameraOpaqueTexture, uv + distortionOffset + chromaOffset).r;
-                float green = SAMPLE_TEXTURE2D_X(_CameraOpaqueTexture, sampler_CameraOpaqueTexture, uv + distortionOffset).g;
-                float blue = SAMPLE_TEXTURE2D_X(_CameraOpaqueTexture, sampler_CameraOpaqueTexture, uv + distortionOffset - chromaOffset).b;
+                float red = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv + distortionOffset + chromaOffset).r;
+                float green = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv + distortionOffset).g;
+                float blue = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv + distortionOffset - chromaOffset).b;
                 float3 chromaColor = float3(red, green, blue);
 
                 float pattern = Noise(noiseUv * 2.4 + edge * 5.0 + luminance * 3.0);
@@ -182,7 +164,10 @@ Shader "CriticalVR/PassthroughTrip"
                 float3 finalColor = lerp(baseColor, graded, saturate(0.25 + finalAlpha * 0.9));
                 finalColor = lerp(finalColor, float3(0.0, 0.0, 0.0), _IntroFade);
 
-                return half4(finalColor, finalAlpha);
+                // Preserve camera alpha so a compositor passthrough underlay remains visible.
+                // This texture contains Unity objects, NOT the device passthrough camera feed.
+                float sourceAlpha = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv).a;
+                return half4(finalColor, max(sourceAlpha, _IntroFade));
             }
             ENDHLSL
         }

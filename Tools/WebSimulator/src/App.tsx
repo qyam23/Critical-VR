@@ -199,6 +199,8 @@ export default function App() {
 
   const resetExperience = useEffectEvent(() => {
     const sim = simRef.current;
+    setUseDebugSlider(false);
+    paramsRef.current.useDebugSlider = false;
     sim.isResetting = true;
     sim.resetElapsed = 0;
     sim.resetFrom = {
@@ -335,11 +337,12 @@ export default function App() {
       sim.intensityScore *= Math.exp(-(params.decayRate * releaseMultiplier) * dt);
     }
 
-    if (sim.intensityScore >= 0.78) {
+    // Only new motion can renew the hold; held intensity must not renew itself.
+    if (motionSignal >= 0.78 && sim.intensityScore >= 0.78) {
       sim.overdriveHold = 4.5;
     } else if (sim.overdriveHold > 0) {
       sim.overdriveHold = Math.max(0, sim.overdriveHold - dt);
-      sim.intensityScore = Math.max(sim.intensityScore, 0.8);
+      sim.intensityScore = Math.max(sim.intensityScore, 0.8 - (4.5 - sim.overdriveHold) * 0.03);
     }
 
     sim.intensityScore = clamp01(sim.intensityScore);

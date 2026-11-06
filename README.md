@@ -80,3 +80,7 @@ The browser app under [`Tools/WebSimulator`](./Tools/WebSimulator) is a support 
 ## Research References
 
 External patterns reviewed and adapted are summarized in [`Docs/Architecture/ReferenceResearch.md`](./Docs/Architecture/ReferenceResearch.md).
+
+## November 2026 preview and readiness patch
+
+See [research, local preview and installation steps](Docs/Quest/ResearchAndReadiness-2026-11-06.md) and [actual verification results](Docs/Quest/Verification-2026-11-06.md). The synthetic preview is available from `CriticalVR > Preview > Create And Play Synthetic Room`. Raw camera effects and headset validation remain pending; the compositor passthrough underlay is not the Unity camera color texture.

@@ -161,6 +161,7 @@ namespace CriticalVR.EditorTools
             EditorUtility.SetDirty(rendererData);
             EditorUtility.SetDirty(pipelineAsset);
             GraphicsSettings.defaultRenderPipeline = pipelineAsset;
+            QualitySettings.renderPipeline = pipelineAsset;
         }
 
         private static void EnsureRendererFeature(UniversalRendererData rendererData, Material material)
@@ -186,7 +187,7 @@ namespace CriticalVR.EditorTools
             SerializedObject featureSerializedObject = new SerializedObject(feature);
             SerializedProperty settingsProperty = featureSerializedObject.FindProperty("settings");
             settingsProperty.FindPropertyRelative("material").objectReferenceValue = material;
-            settingsProperty.FindPropertyRelative("injectionPoint").enumValueIndex = (int)RenderPassEvent.AfterRenderingTransparents;
+            settingsProperty.FindPropertyRelative("injectionPoint").intValue = (int)RenderPassEvent.AfterRenderingTransparents;
             featureSerializedObject.ApplyModifiedPropertiesWithoutUndo();
 
             MethodInfo validateMethod = typeof(ScriptableRendererData).GetMethod("ValidateRendererFeatures", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -337,24 +338,9 @@ namespace CriticalVR.EditorTools
 
         private static void EnsurePreviewOverlay(Camera mainCamera, Material material)
         {
+            // A fullscreen-triangle blit shader cannot also render on a mesh quad.
             GameObject previewQuad = GameObject.Find("CriticalVRPreviewOverlay");
-            if (previewQuad == null)
-            {
-                previewQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                previewQuad.name = "CriticalVRPreviewOverlay";
-            }
-
-            previewQuad.transform.SetParent(mainCamera.transform, false);
-            previewQuad.transform.localPosition = new Vector3(0f, 0f, 0.75f);
-            previewQuad.transform.localScale = new Vector3(1.6f, 0.9f, 1f);
-
-            MeshRenderer meshRenderer = previewQuad.GetComponent<MeshRenderer>();
-            if (meshRenderer != null)
-            {
-                meshRenderer.sharedMaterial = material;
-                meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
-                meshRenderer.receiveShadows = false;
-            }
+            if (previewQuad != null) UnityEngine.Object.DestroyImmediate(previewQuad);
         }
 
         private static void AssignManagerReferences(MotionToExperienceManager manager, Transform centerEyeAnchor, Material material)

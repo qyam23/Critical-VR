@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.Rendering.RenderGraphModule;
+using UnityEngine.Rendering.RenderGraphModule.Util;
 
 namespace CriticalVR.Rendering
 {
@@ -28,7 +30,23 @@ namespace CriticalVR.Rendering
             {
                 _material = material;
                 renderPassEvent = injectionPoint;
-                ConfigureInput(ScriptableRenderPassInput.Color | ScriptableRenderPassInput.Depth | ScriptableRenderPassInput.Normal);
+                ConfigureInput(ScriptableRenderPassInput.Color);
+                requiresIntermediateTexture = true;
+            }
+
+            public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
+            {
+                UniversalResourceData resources = frameData.Get<UniversalResourceData>();
+                UniversalCameraData camera = frameData.Get<UniversalCameraData>();
+                if (_material == null || camera.isPreviewCamera || resources.isActiveTargetBackBuffer) return;
+                TextureHandle source = resources.activeColorTexture;
+                TextureDesc descriptor = renderGraph.GetTextureDesc(source);
+                descriptor.name = "CriticalVR Effect Color";
+                descriptor.clearBuffer = false;
+                TextureHandle destination = renderGraph.CreateTexture(descriptor);
+                var parameters = new RenderGraphUtils.BlitMaterialParameters(source, destination, _material, 0);
+                renderGraph.AddBlitPass(parameters, passName: "CriticalVR Effect");
+                resources.cameraColor = destination;
             }
 
             public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
