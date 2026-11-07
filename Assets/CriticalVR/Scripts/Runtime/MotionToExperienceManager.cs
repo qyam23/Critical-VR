@@ -128,6 +128,10 @@ public class MotionToExperienceManager : MonoBehaviour
     private bool _experienceActive;
     private bool _hasBeenIntense;
     private bool _secondaryWasPressed;
+    private bool _primaryWasPressed;
+    public bool EffectsSuspended { get; private set; }
+    public event System.Action ResetRequested;
+    public event System.Action ResumeRequested;
     private ExperienceState _currentState = ExperienceState.Calm;
 
     public float IntensityScore => _intensityScore;
@@ -169,6 +173,12 @@ public class MotionToExperienceManager : MonoBehaviour
         }
 
         StepSessionIntro(Time.deltaTime);
+        if (EffectsSuspended)
+        {
+            RebaseMotion();
+            ApplyMaterialProperties();
+            return;
+        }
         StepMotion(Time.deltaTime);
         UpdateStateMachine(Time.deltaTime);
         UpdateVisualLayers(Time.deltaTime);
@@ -379,6 +389,13 @@ public class MotionToExperienceManager : MonoBehaviour
     private void HandleResetInput()
     {
         bool resetPressed = false;
+        bool primaryPressed = PrimaryPressed(XRNode.LeftHand) || PrimaryPressed(XRNode.RightHand);
+        bool resumePressed = primaryPressed && !_primaryWasPressed;
+        _primaryWasPressed = primaryPressed;
+#if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
+        resumePressed |= Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame;
+#endif
+        if (resumePressed && EffectsSuspended && !_isResetting) ResumeExperience();
 
         #if UNITY_EDITOR
         #if ENABLE_INPUT_SYSTEM
@@ -407,9 +424,22 @@ public class MotionToExperienceManager : MonoBehaviour
 
     public void ResetExperience()
     {
+        EffectsSuspended = true;
         useDebugSlider = false;
+        // Camera imagery is removed immediately; virtual layers finish their smooth release.
+        _introFade = 0f;
+        _sessionElapsed = sessionIntroDuration;
+        ResetRequested?.Invoke();
         StopAllCoroutines();
         StartCoroutine(FadeOutRoutine());
+    }
+
+    public void ResumeExperience()
+    {
+        if (_isResetting) return;
+        ClearRuntimeState();
+        EffectsSuspended = false;
+        ResumeRequested?.Invoke();
     }
 
     private IEnumerator FadeOutRoutine()
@@ -518,8 +548,14 @@ public class MotionToExperienceManager : MonoBehaviour
 
     private static bool SecondaryPressed(XRNode hand)
     {
-        InputDevice device = InputDevices.GetDeviceAtXRNode(hand);
-        return device.isValid && device.TryGetFeatureValue(CommonUsages.secondaryButton, out bool pressed) && pressed;
+        UnityEngine.XR.InputDevice device = InputDevices.GetDeviceAtXRNode(hand);
+        return device.isValid && device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.secondaryButton, out bool pressed) && pressed;
+    }
+
+    private static bool PrimaryPressed(XRNode hand)
+    {
+        UnityEngine.XR.InputDevice device = InputDevices.GetDeviceAtXRNode(hand);
+        return device.isValid && device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out bool pressed) && pressed;
     }
 
     private void RebaseMotion()
@@ -532,7 +568,9 @@ public class MotionToExperienceManager : MonoBehaviour
 
     private void OnApplicationFocus(bool focused)
     {
-        if (focused) RebaseMotion();
+        // Desktop preview deliberately ticks in background; headset focus loss must suspend.
+        if (!focused && isActiveAndEnabled && !Application.isEditor) ResetExperience();
+        RebaseMotion();
     }
 
     [ContextMenu("Trigger Reset")]

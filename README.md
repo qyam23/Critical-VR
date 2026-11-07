@@ -33,16 +33,22 @@ Open the repository itself as a Unity project.
 
 ## Start Here
 
-1. Read [`Docs/Quest/SetupGuide.md`](./Docs/Quest/SetupGuide.md)
-2. Run `CriticalVR > Bootstrap > Run Full Quest Bootstrap`
-3. Import the Meta XR / Oculus packages in Unity
-4. Replace the preview camera setup with `OVRCameraRig`
-5. Run `CriticalVR > Validation > Run Quest Validation`
-6. Build from Unity or use [`Tools/build_and_install_quest.bat`](./Tools/build_and_install_quest.bat)
+1. Open the repository in Unity **6000.3.11f1** and allow package import.
+2. Run `CriticalVR > Bootstrap > Run Full Quest Bootstrap` to create the production QuestCamera scene, official Meta rig, underlay, camera bridge and Android manifest automatically.
+3. Run `CriticalVR > Validation > Run Quest Validation`.
+4. Run `CriticalVR > Build > Build Quest Development APK`.
+5. Connect and authorize the headset, install, then grant the application's camera permission.
+
+For a rendered synthetic-room test use `CriticalVR > Preview > Run Automated Room Check`. With the editor closed, `Tools\run_quest_checks.ps1` runs the room check, Quest validation and APK build without bypassing validation.
+
+**B/Y stops effects and remains stopped; A/X explicitly resumes.** Camera denial, stale frames or lost focus returns to native passthrough.
+
+Read [SetupGuide.md](Docs/Quest/SetupGuide.md) and [CameraIntegration-2026-11-07.md](Docs/Quest/CameraIntegration-2026-11-07.md). The independent per-eye camera overlay uses calibrated reference-distance reprojection; it is experimental and is not depth-correct reconstructed passthrough. Device alignment, near objects, latency and performance need headset verification.
 
 ## What Is Ready In Repo
 
 - Quest-oriented motion runtime with subtle activation and release timing
+- independent left/right camera bridge with permission handling and fail-closed native passthrough fallback
 - material-driven layer outputs for distortion, patterning, color atmosphere, breathing, overdrive, and intro fade
 - a URP full-screen renderer feature script
 - a production-targeted effect shader
@@ -50,6 +56,7 @@ Open the repository itself as a Unity project.
 - a Unity validation tool with report output
 - local batch build automation
 - local PC-to-Quest build and install automation
+- `Tools/install_quest_apk.ps1` for installing an existing APK without rebuilding
 - deployment checklists and install helpers
 
 ## Fast Commands
@@ -65,13 +72,12 @@ Open the repository itself as a Unity project.
 - Pull, build, and install to Quest:
   `Tools\build_and_install_quest.bat --pull`
 
-## What Is Still Manual In Unity
+## Device Verification Still Required
 
-- importing Meta XR / Oculus Integration packages
-- switching the placeholder preview rig to `OVRCameraRig`
-- enabling Passthrough on `OVRManager` and adding `OVRPassthroughLayer`
-- replacing the preview CenterEyeAnchor reference with the real Quest eye anchor
-- verifying Quest-specific OpenXR / Meta XR plugin toggles in the Editor
+- Approve USB debugging and the application's headset-camera permission on the physical device.
+- Check each eye, image alignment, near-object parallax, gradual activation and decay, B/Y reset and A/X resume.
+- Test camera/focus interruption and sustained device CPU/GPU timing.
+- Do not infer headset readiness from desktop tests or an APK build alone.
 
 ## Desktop Simulator
 

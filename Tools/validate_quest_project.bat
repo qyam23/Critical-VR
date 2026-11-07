@@ -26,7 +26,7 @@ echo   %UNITY_EDITOR%
 echo Log:
 echo   %LOG_FILE%
 
-"%UNITY_EDITOR%" -batchmode -quit -projectPath "%REPO_ROOT%" -executeMethod CriticalVR.EditorTools.CriticalVRProjectValidator.RunQuestValidationBatch -logFile "%LOG_FILE%"
+"%UNITY_EDITOR%" -batchmode -quit -buildTarget Android -projectPath "%REPO_ROOT%" -executeMethod CriticalVR.EditorTools.CriticalVRProjectValidator.RunQuestValidationBatch -logFile "%LOG_FILE%"
 if errorlevel 1 (
   echo Validation failed. See:
   echo   %REPO_ROOT%\Docs\Quest\ValidationReport.latest.md

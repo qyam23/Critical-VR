@@ -47,7 +47,7 @@ echo   %UNITY_EDITOR%
 echo Unity log:
 echo   %LOG_FILE%
 
-"%UNITY_EDITOR%" -batchmode -quit -projectPath "%REPO_ROOT%" -executeMethod %UNITY_METHOD% -logFile "%LOG_FILE%"
+"%UNITY_EDITOR%" -batchmode -quit -buildTarget Android -projectPath "%REPO_ROOT%" -executeMethod %UNITY_METHOD% -logFile "%LOG_FILE%"
 if errorlevel 1 (
   echo Build failed. See:
   echo   %REPO_ROOT%\Builds\Quest\Logs\last-build-report.md

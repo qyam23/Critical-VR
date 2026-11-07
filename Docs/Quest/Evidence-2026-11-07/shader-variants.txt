@@ -1,0 +1,4 @@
+[CriticalVR.Shader] Vertex GLES3x:
+[CriticalVR.Shader] Vertex GLES3x: STEREO_MULTIVIEW_ON
+[CriticalVR.Shader] Vertex Vulkan:
+[CriticalVR.Shader] Vertex Vulkan: STEREO_MULTIVIEW_ON

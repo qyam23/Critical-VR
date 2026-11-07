@@ -11,11 +11,17 @@ if (-not (Test-Path $UnityEditorPath)) {
 }
 Write-Host "Unity: $UnityEditorPath"
 $android = Join-Path (Split-Path $UnityEditorPath) 'Data\PlaybackEngines\AndroidPlayer'
+$toolchain = $env:CRITICAL_VR_ANDROID_TOOLS
+$localConfig = Join-Path $project 'UserSettings\CriticalVRAndroidToolchain.txt'
+if (-not $toolchain -and (Test-Path $localConfig)) { $toolchain = (Get-Content $localConfig -Raw).Trim() }
+if (-not $toolchain) { $toolchain = $android }
+Write-Host "Android build module: $(Test-Path (Join-Path $android 'UnityEditor.Android.Extensions.dll'))"
+Write-Host "Android toolchain: $toolchain"
 foreach ($component in @('SDK', 'NDK', 'OpenJDK')) {
-    $present = Test-Path (Join-Path $android $component)
+    $present = Test-Path (Join-Path $toolchain $component)
     Write-Host "Android $component installed: $present"
 }
-$adb = Join-Path $android 'SDK\platform-tools\adb.exe'
+$adb = Join-Path $toolchain 'SDK\platform-tools\adb.exe'
 if (Test-Path $adb) {
     & $adb devices -l
     if ($LASTEXITCODE -ne 0) { throw 'ADB device query failed.' }
@@ -25,5 +31,5 @@ if (Test-Path $adb) {
 } else { Write-Warning 'ADB missing. Add Android SDK via Unity Hub.' }
 Write-Host 'This check does not change your Meta account, app permissions or existing project files.'
 if ($OpenUnity) {
-    Start-Process -FilePath $UnityEditorPath -ArgumentList @('-projectPath', ('"' + $project + '"'))
+    Start-Process -FilePath $UnityEditorPath -ArgumentList @('-projectPath', ('"' + $project + '"')) -WindowStyle Hidden
 }

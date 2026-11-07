@@ -24,9 +24,14 @@ namespace CriticalVR.EditorTools
 
         public static void CreateScene()
         {
+            CriticalVRPreviewRestore.RememberQuestState();
             Directory.CreateDirectory(Folder);
             AssetDatabase.Refresh();
-            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            Scene scene;
+            bool existing = File.Exists(Folder + "/SyntheticRoom.unity");
+            scene = existing
+                ? EditorSceneManager.OpenScene(Folder + "/SyntheticRoom.unity", OpenSceneMode.Single)
+                : EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var renderer = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(Folder + "/Renderer.asset");
             if (renderer == null)
             {
@@ -61,6 +66,7 @@ namespace CriticalVR.EditorTools
             pipeline.msaaSampleCount = 1;
             GraphicsSettings.defaultRenderPipeline = pipeline;
             QualitySettings.renderPipeline = pipeline;
+            if (existing) { AssetDatabase.SaveAssets(); return; }
             var cameraObject = new GameObject("DesktopPreviewCamera");
             cameraObject.tag = "MainCamera";
             var camera = cameraObject.AddComponent<Camera>();
@@ -95,7 +101,13 @@ namespace CriticalVR.EditorTools
             box.name = name;
             box.transform.position = position;
             box.transform.localScale = scale;
-            var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            string path = Folder + "/" + name.Replace(" ", "_") + ".mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                AssetDatabase.CreateAsset(material, path);
+            }
             material.SetColor("_BaseColor", color);
             box.GetComponent<Renderer>().sharedMaterial = material;
         }

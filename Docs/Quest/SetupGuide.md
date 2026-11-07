@@ -1,277 +1,42 @@
 # Setup Guide
 
-This repository is now a Unity project root. Open the repository itself in Unity.
+Open this repository as a Unity project with **6000.3.11f1**. The package manifest installs URP, OpenXR, Meta XR Core 85.0.0 and MRUK 85.0.0; Unity Pipeline is included for local editor automation.
 
-## Version Assumptions
+## Automatic Quest setup
 
-- Unity target design: `Unity 2022.3 LTS or newer`
-- Local bootstrap seed currently saved with: `Unity 6000.3.11f1`
-- Render pipeline: `URP`
-- XR path: `Meta Quest passthrough` with `OVRCameraRig`
-- Build target: `Android`
+1. Let package import and C# compilation complete.
+2. Run **CriticalVR > Bootstrap > Run Full Quest Bootstrap**.
+3. Run **CriticalVR > Validation > Run Quest Validation** and resolve every error.
+4. Run **CriticalVR > Build > Build Quest Development APK**.
 
-If your team must stay strictly on `2022.3 LTS`, re-save the project in that editor version after importing the same packages. The runtime code and repository layout were written to stay compatible with the `2022.3+` API surface.
+The bootstrap copies the original QuestBootstrap scene to **Assets/CriticalVR/Scenes/CriticalVR_QuestCamera.unity** on first use, preserving the original. It installs the official OVRCameraRig prefab in the copy, enables OVRManager passthrough and its underlay, wires the motion runtime and dual-camera bridge, configures OpenXR/Touch input and single-pass instanced rendering, generates the Android manifest with Meta's generator and selects only the production scene for builds. No manual rig dragging or reference assignment is intended.
 
-## Before Opening Unity
+Build settings: Android, ARM64, IL2CPP, minimum API 32, linear colour, Input System only, Vulkan first and OpenGLES3 fallback. The validator rejects unsupported Active Input Handling = Both. Package: **com.qyam23.criticalvr**. Output: **Builds/Quest/Development/CriticalVR-Quest-Development.apk**.
 
-Make sure the local machine has:
+## Local Android tools
 
-- Unity with `Android Build Support`
-- `SDK`, `NDK`, and `OpenJDK` installed through Unity Hub
-- Meta Quest connected by USB for `Build And Run` or `adb install`
-- Developer Mode enabled on the headset
+Reuse Unity Hub's Android Build Support, SDK, NDK r27c and OpenJDK 17. The project also supports an existing external toolchain. Set **CRITICAL_VR_ANDROID_TOOLS** to a directory containing SDK/, NDK/ and OpenJDK/, or write that directory to the Git-ignored **UserSettings/CriticalVRAndroidToolchain.txt**. Unity applies those paths automatically. External SDKs must expose **cmdline-tools/latest/bin/sdkmanager.bat**.
 
-## Package Expectations
+Run **Tools/quest_preflight.ps1** to inspect the expected editor, toolchain and ADB devices. It does not activate a license or grant device/application permissions.
 
-Already included in `Packages/manifest.json`:
+## Synthetic room
 
-- `com.unity.render-pipelines.universal`
-- `com.unity.inputsystem`
-- `com.unity.xr.management`
-- `com.unity.xr.openxr`
-- `com.unity.mobile.android-logcat`
+**CriticalVR > Preview > Create And Play Synthetic Room** creates/opens a separate synthetic scene and preview pipeline. Wait for the ten-second intro, then use the Inspector's debug intensity. Space/B/Y stops and suspends effects; R resumes. The prior scene, pipelines, XR initialization and background setting are restored on leaving Play Mode.
 
-Still manual:
+**CriticalVR > Preview > Run Automated Room Check** tests actual Unity runtime updates, motion-driven activation, decay, reset and explicit resume, and captures active/reset images through URP. Results are under **Builds/Quest/Logs/**. This is not passthrough-camera or headset verification.
 
-- import `Meta XR All-in-One SDK` or the equivalent Oculus Integration / Meta XR packages that provide:
-  - `OVRCameraRig`
-  - `OVRManager`
-  - `OVRPassthroughLayer`
-  - controller bindings and Quest helpers
+For a full batch run, first save and close this project's editor:
 
-## First Open In Unity
-
-1. Open the repository folder in Unity.
-2. Let Package Manager finish importing URP, XR Management, and OpenXR.
-3. In the top menu run:
-   `CriticalVR > Bootstrap > Run Full Quest Bootstrap`
-
-That bootstrap now does the following:
-
-- switches the project to `Android`
-- configures Quest-oriented Android player settings
-- creates or repairs:
-  - `Assets/CriticalVR/Scenes/CriticalVR_QuestBootstrap.unity`
-  - `Assets/CriticalVR/Resources/Materials/CriticalVRPassthroughTrip.mat`
-  - `Assets/CriticalVR/Settings/Rendering/CriticalVR_Renderer.asset`
-  - `Assets/CriticalVR/Settings/Rendering/CriticalVR_URP.asset`
-- assigns the URP pipeline asset in `GraphicsSettings`
-- adds the `CriticalVRFullscreenRendererFeature` to the renderer data
-- creates Android XR management settings and assigns the OpenXR loader
-
-The bootstrap scene starts with a preview camera rig placeholder so the repository opens cleanly before Meta packages are imported.
-
-## URP Setup
-
-You must still create or confirm the URP assets inside the Unity Editor.
-
-The repository bootstrap already creates the pipeline asset and renderer data for you.
-
-You should verify in the Editor:
-
-1. `Project Settings > Graphics` points to:
-   `Assets/CriticalVR/Settings/Rendering/CriticalVR_URP.asset`
-2. the active renderer data contains:
-   `CriticalVRFullscreenRendererFeature`
-3. the pipeline asset still has:
-   - `Opaque Texture`
-   - `Depth Texture`
-   - `Linear` color space
-
-## Vulkan-First Recommendation
-
-The bootstrap script already sets Android graphics APIs to:
-
-1. `Vulkan`
-2. `OpenGLES3`
-
-Keep `Vulkan` first for Quest unless your specific headset/plugin combination forces a fallback.
-
-## Meta XR / Oculus Setup
-
-After importing Meta XR packages:
-
-1. Open `Assets/CriticalVR/Scenes/CriticalVR_QuestBootstrap.unity`
-2. Delete or disable the placeholder object:
-   `XROriginPreview`
-3. Add `OVRCameraRig`
-4. Keep it at world origin: position `(0,0,0)` and rotation `(0,0,0)`
-5. Add or confirm `OVRManager` on the rig
-6. Set passthrough mode for `OVRManager` and `OVRPassthroughLayer` to `Underlay`
-7. Add `OVRPassthroughLayer` if it is not already present
-
-## Attach Motion Runtime
-
-The runtime host object is:
-
-- `CriticalVRExperienceRoot`
-
-On that object:
-
-1. Keep `MotionToExperienceManager`
-2. Assign `CenterEyeAnchor` to:
-   `OVRCameraRig/TrackingSpace/CenterEyeAnchor`
-3. Assign `Effect Material` to:
-   `Assets/CriticalVR/Resources/Materials/CriticalVRPassthroughTrip.mat`
-
-This script already includes:
-
-- motion history
-- hysteresis
-- layered attack/release timing
-- gradual 10-second black intro
-- Recovery phase logic
-- emergency reset
-- material parameter output for the shader
-
-## Renderer Feature Setup
-
-Production path:
-
-The bootstrap now attempts to do this automatically.
-
-Verify:
-
-1. Open:
-   `Assets/CriticalVR/Settings/Rendering/CriticalVR_Renderer.asset`
-2. Confirm Renderer Feature:
-   `CriticalVRFullscreenRendererFeature`
-3. Confirm material:
-   `Assets/CriticalVR/Resources/Materials/CriticalVRPassthroughTrip.mat`
-4. Confirm injection point:
-   `After Rendering Transparents`
-
-Why this is the main path:
-
-- passthrough is an `Underlay`, so the world remains the background
-- the full-screen pass adds altered-perception layers on top
-- the center remains more stable while the periphery blooms first
-
-Fallback preview path:
-
-- the bootstrap scene includes `CriticalVRPreviewOverlay`, a camera-locked quad
-- keep it only for editor preview or debugging
-- disable or remove it once the renderer feature is active
-
-## Passthrough Layer Setup
-
-On `OVRPassthroughLayer`:
-
-- Composition Placement: `Underlay`
-- style opacity: start conservative
-- no aggressive color mapping at the passthrough layer itself
-
-The altered perception should come from the URP effect material, not from harsh passthrough toggling.
-
-## Android Player Settings
-
-Recommended checks in `Project Settings > Player > Android`:
-
-- `IL2CPP`
-- `ARM64`
-- `Minimum API Level`: `29` or higher
-- `Target API Level`: `Automatic (highest installed)`
-- `Color Space`: `Linear`
-- `Graphics APIs`: Vulkan first, OpenGLES3 second
-- `Multithreaded Rendering`: enabled
-- package name:
-  `com.qyam23.criticalvr`
-
-## Build And Run
-
-Preferred path:
-
-1. Connect the Quest by USB
-2. Accept the headset RSA prompt
-3. In Unity choose:
-   `File > Build Settings > Android > Build And Run`
-
-Expected result:
-
-- Unity builds an APK
-- installs it to the connected headset
-- launches it on device
-
-## Validation Before Build
-
-In Unity:
-
-- run `CriticalVR > Validation > Run Quest Validation`
-
-From the PC:
-
-```bat
-Tools\validate_quest_project.bat
+```powershell
+powershell -NoProfile -File Tools\run_quest_checks.ps1
 ```
 
-This writes:
+The script runs Play Mode checks, production Quest validation and the development APK build in order, without bypassing validation. The older validate/build/install batch helpers remain available and also require the editor to be closed.
 
-- `Docs/Quest/ValidationReport.latest.md`
+## Headset
 
-The batch helper also guards against two common local blockers:
+Connect the Quest with a USB data cable and approve USB debugging inside it. Use the actual device model and Horizon OS to confirm camera compatibility. A developer account does not grant runtime camera permission or USB authorization.
 
-- the project still being open in another Unity editor session
-- missing Android Build Support in the detected Unity editor
+Install and launch the existing APK using **powershell -NoProfile -File Tools\install_quest_apk.ps1**. This locates the configured ADB, checks the authorized device/model, records its OS build and launches the app without rebuilding or closing Unity. Grant the application's camera prompt in the headset. **B/Y stops** and remains stopped; **A/X deliberately resumes** or retries. Denied permission, lost focus or stale/missing camera frames returns to native passthrough.
 
-## APK Generation Path
-
-If you want the APK without immediate install:
-
-1. In `Build Settings`, choose `Build`
-2. Save into a local folder such as:
-   `Builds/Android/CriticalVR.apk`
-
-## ADB Install Fallback
-
-If Unity build succeeds but install fails, use:
-
-- [`Tools/install_apk.bat`](../../Tools/install_apk.bat)
-- [`Tools/build_and_install_quest.bat`](../../Tools/build_and_install_quest.bat)
-
-Example:
-
-```bat
-Tools\install_apk.bat Builds\Android\CriticalVR.apk
-```
-
-Manual fallback:
-
-```bat
-adb devices
-adb install -r Builds\Android\CriticalVR.apk
-```
-
-Preferred repeatable local automation:
-
-```bat
-Tools\build_and_install_quest.bat
-```
-
-Useful options:
-
-```bat
-Tools\build_and_install_quest.bat --pull
-Tools\build_and_install_quest.bat --release
-Tools\build_and_install_quest.bat --skip-build
-```
-
-## First-Launch Debugging Notes
-
-Use these checks first:
-
-- confirm headset appears in `adb devices`
-- open `Window > Analysis > Android Logcat`
-- watch for shader compile warnings, OpenXR loader issues, or missing Meta XR components
-- verify the app launches to a black screen that reveals gradually over `10s`
-- verify `B` and `Y` reset the experience
-- verify the effect blooms first in the periphery, not the center
-
-## Manual Unity Editor Actions Still Required
-
-These cannot be fully solved by repository editing alone:
-
-- import Meta XR / Oculus Integration package set
-- replace the placeholder preview rig with `OVRCameraRig`
-- assign `CenterEyeAnchor` from the imported Meta rig
-- enable passthrough and confirm headset-specific plugin settings
-- build once on the target headset to validate the final comfort tuning
+Read [CameraIntegration-2026-11-07.md](CameraIntegration-2026-11-07.md) for the source references, stereo projection limits, lifecycle handling and device checklist. The current per-eye camera projection uses a reference distance and is not depth-correct reconstructed passthrough. Device stereo alignment, near objects, visual comfort and sustained GPU/CPU timing require observation and measurements on the headset.

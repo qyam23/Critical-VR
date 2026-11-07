@@ -7,9 +7,10 @@ namespace CriticalVR.EditorTools
 {
     internal static class CriticalVRProjectPaths
     {
-        internal const string TargetBranch = "codex/meta-quest-xr-upgrade";
+        internal const string TargetBranch = "codex/vr-preview-readiness-2026-11-06";
 
-        internal const string ScenePath = "Assets/CriticalVR/Scenes/CriticalVR_QuestBootstrap.unity";
+        internal const string ScenePath = "Assets/CriticalVR/Scenes/CriticalVR_QuestCamera.unity";
+        internal const string OriginalScenePath = "Assets/CriticalVR/Scenes/CriticalVR_QuestBootstrap.unity";
         internal const string MaterialPath = "Assets/CriticalVR/Resources/Materials/CriticalVRPassthroughTrip.mat";
         internal const string ShaderPath = "CriticalVR/PassthroughTrip";
         internal const string RenderingSettingsFolder = "Assets/CriticalVR/Settings/Rendering";
