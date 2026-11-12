@@ -406,7 +406,7 @@ MonoBehaviour:
   centerEyeAnchor: {fileID: 319799446}
   effectMaterial: {fileID: 2100000, guid: 484c52ff351202e418ca4930f15fd938, type: 2}
   mode: 0
-  sessionIntroDuration: 10
+  sessionIntroDuration: 7
   centerStabilityAtPeak: 0.7
   peripheralWeightAtPeak: 0.98
   linearAccelerationWeight: 0.48

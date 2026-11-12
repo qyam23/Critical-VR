@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Critical-VR | קונסולת Quest</title>
+<style>
+:root{color-scheme:dark;--bg:#101318;--line:#2d3541;--text:#f1f4f9;--muted:#aeb8c6;--accent:#80dfd0;--surface:#1b222b;--danger:#f4b1b1}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px 'Segoe UI',Arial,sans-serif}header,main{max-width:1510px;margin:auto;padding:20px 32px}header{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line)}h1,h2,p{margin:0}h1{font-size:24px;letter-spacing:.02em}h2{font-size:17px}small,p{color:var(--muted)}button{font:inherit;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:9px 13px;cursor:pointer}button:hover:enabled{border-color:var(--accent)}button:disabled{opacity:.45;cursor:default}button.primary{background:var(--accent);color:#0a2625;border-color:transparent;font-weight:650}button.stop{color:var(--danger)}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.status{display:flex;align-items:center;gap:8px;color:var(--muted)}.dot{width:9px;height:9px;border-radius:50%;background:#8290a3}.dot.on{background:var(--accent)}.toolbar{justify-content:space-between;gap:14px;margin-bottom:20px}.workspace{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(275px,1fr);gap:28px}.section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.screen{position:relative;min-height:270px;aspect-ratio:16/10;background:#080a0e;border:1px solid var(--line);display:grid;place-items:center;overflow:hidden;border-radius:8px}.screen img{width:100%;height:100%;object-fit:contain;position:absolute}.screen [hidden]{display:none}.side{border-right:1px solid var(--line);padding-right:22px}.group{padding:16px 0;border-bottom:1px solid var(--line)}.group:first-child{padding-top:0}.control{margin-top:17px}.control label{display:flex;justify-content:space-between}.control input{width:100%;accent-color:var(--accent);direction:ltr;margin:10px 0 0}.control output{color:var(--accent);direction:ltr;font-variant-numeric:tabular-nums}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.stats b{display:block;font-size:21px;font-variant-numeric:tabular-nums;direction:ltr;text-align:right}.stats small{font-size:12px}canvas{width:100%;height:130px;display:block;background:#141920;border-radius:6px}.legend{display:flex;gap:12px;font-size:12px;color:var(--muted);margin-top:8px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:4px}.message{min-height:23px;margin-top:14px;color:var(--muted)}.message.error{color:var(--danger)}.footer{font-size:12px;margin-top:12px}.reveal{color:var(--accent);font-size:13px}@media(max-width:850px){header,main{padding:16px}.workspace{grid-template-columns:1fr}.side{border-right:0;padding-right:0}.screen{min-height:180px}}
+</style>
+</head>
+<body>
+<header><h1 dir="ltr">Critical-VR <small>· Quest Console</small></h1><div class="status"><span id="dot" class="dot"></span><span id="connection">מחפש קסדה</span></div></header>
+<main>
+<div class="row toolbar"><div class="row"><button class="primary" data-action="launch" data-device>פתח אפליקציה</button><button data-action="install" data-device>התקן או עדכן</button></div><div class="row"><button data-action="quit" data-device>סגור אפליקציה</button><button data-action="sleep" data-device>העבר לשינה</button><button class="stop" data-action="poweroff" data-device>כבה קסדה</button></div></div>
+<div class="workspace">
+  <section><div class="section-head"><h2>תצוגת הקסדה</h2><div class="row"><button id="preview" data-device>הפעל תצוגה</button><button data-action="mirror" data-device>פתח שיקוף חי</button></div></div>
+  <div class="screen"><p id="screenHint">התצוגה תופיע לאחר חיבור והפעלה</p><img id="screen" alt="תצוגה מתעדכנת של הקסדה" hidden></div>
+  <p class="footer">התצוגה כאן מתעדכנת פעם בשנייה. השיקוף החי נפתח בחלון נפרד.</p>
+  <p class="message" id="message" role="status"></p></section>
+  <aside class="side">
+    <section class="group"><div class="section-head"><h2>בקרת האפקט</h2><span id="effectState" class="reveal">ממתין לאפליקציה</span></div>
+    <div class="row"><button class="stop" data-action="stop" data-live>עצור אפקט</button><button class="primary" data-action="resume" data-live>חדש אפקט</button></div>
+    <div class="control"><label for="strength">עוצמת האפקט <output id="strengthValue">100%</output></label><input id="strength" type="range" min="0" max="130" value="100" data-live></div>
+    <div class="control"><label for="depth">עיוות ודפוסים <output id="depthValue">100%</output></label><input id="depth" type="range" min="0" max="130" value="100" data-live></div></section>
+    <section class="group"><h2>תנועת הראש מול האפקט</h2><div class="stats"><div><b id="angular">—</b><small>סיבוב °/שנייה</small></div><div><b id="linear">—</b><small>תזוזה מ׳/שנייה</small></div><div><b id="intensity">—</b><small>עוצמה מחושבת</small></div></div>
+    <canvas id="chart" aria-label="גרף מהירות סיבוב ועוצמת האפקט"></canvas><div class="legend"><span><i style="background:#80dfd0"></i>מהירות סיבוב</span><span><i style="background:#beb3ee"></i>עוצמת האפקט</span></div></section>
+    <section class="group"><div class="section-head"><h2>הקלטת מדידות</h2><small id="sampleCount">0 דגימות</small></div><div class="row"><button id="record" data-live>התחל הקלטה</button><button id="csv" disabled>ייצא CSV</button></div></section>
+  </aside>
+</div>
+</main>
+<script>
+const token = '__SESSION_TOKEN__';
+const headers = {'X-CriticalVR-Token': token};
+const $ = id => document.getElementById(id);
+let state = {}, history = [], lastSample = '', session = '', busy = false, preview = false, frameUrl = null;
+
+function message(text, error=false) {
+  $('message').textContent = text;
+  $('message').classList.toggle('error', error);
+}
+
+function draw() {
+  const canvas = $('chart'), width = canvas.clientWidth, height = canvas.clientHeight;
+  const scale = window.devicePixelRatio || 1;
+  canvas.width = width * scale; canvas.height = height * scale;
+  const ctx = canvas.getContext('2d'); ctx.scale(scale, scale);
+  const top=12, bottom=height-22, left=10, right=width-10;
+  ctx.strokeStyle='#303a48'; ctx.beginPath();
+  for(let n=0;n<=3;n++){const y=top+(bottom-top)*n/3;ctx.moveTo(left,y);ctx.lineTo(right,y);}ctx.stroke();
+  ctx.font='11px Segoe UI';ctx.fillStyle='#aeb8c6';ctx.textAlign='left';ctx.fillText('60 s',left,height-6);ctx.textAlign='right';ctx.fillText('0 s',right,height-6);
+  if (!history.length) return;
+  const end=history.at(-1).seconds;
+  const maxSpeed=Math.max(90,...history.map(x=>x.angularDegPerSec));
+  for(const [key,max,color] of [['angularDegPerSec',maxSpeed,'#80dfd0'],['intensity',1,'#beb3ee']]){
+    ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=2;
+    history.forEach((p,i)=>{const x=right-(end-p.seconds)*(right-left)/60,y=bottom-p[key]/max*(bottom-top);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);});ctx.stroke();
+  }
+}
+
+function paint() {
+  const s=state.sample;
+  $('connection').textContent=state.model ? `${state.model} · ${state.message}` : (state.message || 'מחפש קסדה');
+  $('dot').classList.toggle('on',!!state.connected);
+  document.querySelectorAll('[data-device]').forEach(x=>x.disabled=busy||!state.connected);
+  document.querySelectorAll('[data-live]').forEach(x=>x.disabled=busy||!s);
+  $('effectState').textContent=!s?'ממתין לאפליקציה':s.reveal<1?`פתיחה ${Math.round(s.reveal*100)}%`:s.suspended?'מושהה':s.camerasReady?'פעיל':'ממתין למצלמות';
+  $('angular').textContent=s?s.angularDegPerSec.toFixed(1):'—';
+  $('linear').textContent=s?s.linearMetersPerSec.toFixed(2):'—';
+  $('intensity').textContent=s?`${Math.round(s.intensity*100)}%`:'—';
+  $('sampleCount').textContent=`${state.samples||0} דגימות`;
+  $('record').textContent=state.recording?'סיים הקלטה':'התחל הקלטה';
+  $('record').disabled=busy||(!s&&!state.recording);
+  $('csv').disabled=!state.samples;
+  if (s) {
+    if(session!==s.session){history=[];lastSample='';session=s.session;}
+    if(lastSample!==s.seconds){history.push(s);lastSample=s.seconds;history=history.filter(p=>p.seconds>=s.seconds-60);draw();}
+    if(!busy)for(const key of ['strength','depth']){
+      if(document.activeElement!==$(key)){$(key).value=Math.round(s[key]*100);$(key+'Value').textContent=$(key).value+'%';}
+    }
+  }
+}
+
+async function refresh() {
+  try { const response=await fetch('/state',{headers});state=await response.json();paint(); }
+  catch { message('הקונסולה המקומית אינה זמינה',true); }
+  setTimeout(refresh,700);
+}
+
+async function dispatch(action,values={}) {
+  if(busy)return;
+  if(action==='poweroff'&&!confirm('לסגור את Critical-VR ולבקש כיבוי מלא של הקסדה?'))return;
+  busy=true;paint();message(action==='install'?'מתקין את גרסת הפיתוח בקסדה…':'ממתין לאישור הפעולה…');
+  try {
+    const response=await fetch('/action',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({action,...values})});
+    const result=await response.json();if(!response.ok)throw new Error(result.error);
+    message(action==='poweroff'?'נשלחה בקשת כיבוי לקסדה':action==='mirror'?'חלון השיקוף הופעל':'הפעולה התקבלה');
+  } catch(error){message(error.message,true);}finally{busy=false;paint();}
+}
+
+async function refreshFrame(){
+  if(preview&&state.connected){
+    try{
+      const response=await fetch('/frame',{headers});if(!response.ok)throw new Error('unavailable');
+      if(preview){const url=URL.createObjectURL(await response.blob());$('screen').src=url;$('screen').hidden=false;$('screenHint').hidden=true;if(frameUrl)URL.revokeObjectURL(frameUrl);frameUrl=url;}
+    }catch{$('screen').hidden=true;$('screenHint').hidden=false;$('screenHint').textContent='תמונת הקסדה אינה זמינה כעת';}
+  }else{$('screen').hidden=true;$('screenHint').hidden=false;$('screenHint').textContent=preview?'ממתין לחיבור הקסדה':'התצוגה תופיע לאחר חיבור והפעלה';}
+  setTimeout(refreshFrame,1000);
+}
+
+document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>dispatch(b.dataset.action)));
+for(const key of ['strength','depth']){
+  $(key).addEventListener('input',()=>$(key+'Value').textContent=$(key).value+'%');
+  $(key).addEventListener('change',()=>dispatch('set',{strength:$('strength').value/100,depth:$('depth').value/100}));
+}
+$('preview').addEventListener('click',()=>{preview=!preview;$('preview').textContent=preview?'עצור תצוגה':'הפעל תצוגה';});
+$('record').addEventListener('click',()=>dispatch(state.recording?'end-record':'record'));
+$('csv').addEventListener('click',async()=>{const response=await fetch('/csv',{headers});if(!response.ok)return;const url=URL.createObjectURL(await response.blob());const a=document.createElement('a');a.href=url;a.download='criticalvr-motion.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+window.addEventListener('resize',draw);draw();refresh();refreshFrame();
+</script>
+</body>
+</html>

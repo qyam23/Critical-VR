@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using Meta.XR;
 using UnityEngine;
 using UnityEngine.Android;
@@ -49,13 +50,21 @@ namespace CriticalVR
             RenderPipelineManager.beginCameraRendering += BeforeCameraRendering;
         }
 
-        private void Start() => TryStart();
+        private IEnumerator Start()
+        {
+#if UNITY_ANDROID && DEVELOPMENT_BUILD && !UNITY_EDITOR
+            gameObject.AddComponent<QuestDesktopLink>().Initialize(experience, eyeCamera, this, effectMaterial);
+#endif
+            // Reveal the compositor underlay before showing a camera permission prompt.
+            while (experience != null && experience.SessionReveal < 1f) yield return null;
+            TryStart();
+        }
 
         public void TryStart()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (!_focused || _permissionPending || effectMaterial == null || experience == null ||
-                experience.EffectsSuspended || eyeCamera == null) return;
+                experience.EffectsSuspended || experience.SessionReveal < 1f || eyeCamera == null) return;
             try
             {
                 if (!PassthroughCameraAccess.IsSupported)
@@ -130,7 +139,8 @@ namespace CriticalVR
         {
             if (statusText != null)
             {
-                statusText.gameObject.SetActive(!StereoFeedReady || experience.EffectsSuspended || Time.realtimeSinceStartup - _startedAt < 15f);
+                statusText.gameObject.SetActive(experience.SessionReveal >= 1f &&
+                    (!StereoFeedReady || experience.EffectsSuspended || Time.realtimeSinceStartup - _startedAt < 15f));
                 statusText.text = (experience.EffectsSuspended ? "Effects stopped. Your room is visible." :
                     StereoFeedReady ? "Critical-VR | Experimental camera effects" : "Your room is visible. Waiting for camera access.") +
                     "\nLeft pinch: stop | Hold right pinch: resume" +
@@ -164,7 +174,10 @@ namespace CriticalVR
             // Never show one eye alone or pair frames from substantially different times.
             if (Math.Abs((_feeds[0].Timestamp - _feeds[1].Timestamp).TotalSeconds) > 0.05)
             {
-                FailClosed("Left/right camera timestamps diverged. Press A/X to retry.");
+                // The two streams can deliver their first frames at different times.
+                // Keep native passthrough visible until a synchronized pair arrives.
+                if (StereoFeedReady || Time.realtimeSinceStartup - _startedAt > 10f)
+                    FailClosed("Left/right camera timestamps diverged. Press A/X to retry.");
                 return;
             }
             if (!StereoFeedReady)
@@ -232,7 +245,11 @@ namespace CriticalVR
 
         private void OnApplicationPause(bool paused)
         {
-            if (paused) { StopFeeds(); if (experience != null) experience.ResetExperience(); }
+            if (paused)
+            {
+                StopFeeds();
+                if (experience != null && experience.SessionReveal >= 1f) experience.ResetExperience();
+            }
         }
 
         private void OnDisable()

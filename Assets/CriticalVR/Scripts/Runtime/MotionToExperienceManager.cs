@@ -57,7 +57,8 @@ public class MotionToExperienceManager : MonoBehaviour
 
     [Header("Experience")]
     [SerializeField] private ExperienceMode mode = ExperienceMode.Psychedelic;
-    [SerializeField, Min(5f)] private float sessionIntroDuration = 10f;
+    public const float DefaultIntroDuration = 7f;
+    [SerializeField, Min(1.5f)] private float sessionIntroDuration = DefaultIntroDuration;
     [SerializeField, Range(0.35f, 1f)] private float centerStabilityAtPeak = 0.7f;
     [SerializeField, Range(0.5f, 1.25f)] private float peripheralWeightAtPeak = 0.98f;
 
@@ -148,6 +149,7 @@ public class MotionToExperienceManager : MonoBehaviour
     public float IntensityScore => _intensityScore;
     public ExperienceState CurrentState => _currentState;
     public float SessionReveal => 1f - _introFade;
+    private bool _introFrameStarted;
 
     private void Awake()
     {
@@ -183,7 +185,12 @@ public class MotionToExperienceManager : MonoBehaviour
             return;
         }
 
-        StepSessionIntro(Time.deltaTime);
+        if (_introFade > 0f && CanAdvanceIntro())
+        {
+            if (_introFrameStarted) StepSessionIntro(Time.unscaledDeltaTime);
+            _introFrameStarted = true;
+        }
+        else _introFrameStarted = false;
         if (EffectsSuspended)
         {
             RebaseMotion();
@@ -200,7 +207,16 @@ public class MotionToExperienceManager : MonoBehaviour
     {
         _sessionElapsed += dt;
         float reveal = Mathf.Clamp01(_sessionElapsed / Mathf.Max(0.01f, sessionIntroDuration));
-        _introFade = 1f - reveal;
+        _introFade = 1f - Mathf.SmoothStep(0f, 1f, reveal);
+    }
+
+    private static bool CanAdvanceIntro()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        return OVRManager.hasVrFocus && OVRManager.hasInputFocus;
+#else
+        return true;
+#endif
     }
 
     private void StepMotion(float dt)
@@ -625,7 +641,7 @@ public class MotionToExperienceManager : MonoBehaviour
     private void OnApplicationFocus(bool focused)
     {
         // Desktop preview deliberately ticks in background; headset focus loss must suspend.
-        if (!focused && isActiveAndEnabled && !Application.isEditor) ResetExperience();
+        if (!focused && SessionReveal >= 1f && isActiveAndEnabled && !Application.isEditor) ResetExperience();
         RebaseMotion();
     }
 

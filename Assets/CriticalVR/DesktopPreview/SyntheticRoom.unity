@@ -803,7 +803,7 @@ MonoBehaviour:
   centerEyeAnchor: {fileID: 336815538}
   effectMaterial: {fileID: 2100000, guid: f6ab92522be90844dab80305ff43f8d5, type: 2}
   mode: 0
-  sessionIntroDuration: 10
+  sessionIntroDuration: 7
   centerStabilityAtPeak: 0.7
   peripheralWeightAtPeak: 0.98
   linearAccelerationWeight: 0.48

@@ -57,6 +57,7 @@ namespace CriticalVR.EditorTools
             motionSettings.FindProperty("centerEyeAnchor").objectReferenceValue = rig.centerEyeAnchor;
             motionSettings.FindProperty("effectMaterial").objectReferenceValue = material;
             motionSettings.FindProperty("useDebugSlider").boolValue = false;
+            motionSettings.FindProperty("sessionIntroDuration").floatValue = MotionToExperienceManager.DefaultIntroDuration;
             motionSettings.ApplyModifiedPropertiesWithoutUndo();
             var bridge = experience.GetComponent<QuestPassthroughCameraBridge>();
             if (bridge == null) bridge = experience.gameObject.AddComponent<QuestPassthroughCameraBridge>();

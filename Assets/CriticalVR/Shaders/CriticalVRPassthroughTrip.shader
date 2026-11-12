@@ -4,6 +4,8 @@ Shader "CriticalVR/PassthroughTrip"
     {
         [HideInInspector] _MainTex("MainTex", 2D) = "white" {}
         [HideInInspector] _PassthroughMode("Passthrough Mode", Float) = 0
+        [HideInInspector] _DesktopStrength("Desktop Strength", Float) = 1
+        [HideInInspector] _DesktopDepth("Desktop Distortion and Pattern", Float) = 1
         [HideInInspector] _CameraFeedReady("Camera Feed Ready", Float) = 0
         [HideInInspector] _CameraLeft("Left Camera", 2D) = "black" {}
         [HideInInspector] _CameraRight("Right Camera", 2D) = "black" {}
@@ -60,6 +62,8 @@ Shader "CriticalVR/PassthroughTrip"
             float4 _CameraCalibrationRight;
             CBUFFER_START(UnityPerMaterial)
                 float _PassthroughMode;
+                float _DesktopStrength;
+                float _DesktopDepth;
                 float _CameraFeedReady;
                 float _CameraReferenceDistance;
                 float _CameraMaximumOpacity;
@@ -186,15 +190,22 @@ Shader "CriticalVR/PassthroughTrip"
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
                 float2 uv = input.texcoord;
                 half4 sceneColor = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv);
-                if (_PassthroughMode > 0.5 && (_CameraFeedReady < 0.5 || _IntensityScore < 0.001))
+                if (_PassthroughMode > 0.5 && _IntroFade > 0.0)
+                {
+                    // Opaque black at launch, then reveal the compositor underlay through alpha.
+                    half fade = saturate(_IntroFade);
+                    return sceneColor * (1.0h - fade) + half4(0, 0, 0, fade);
+                }
+                if (_PassthroughMode > 0.5 && (_CameraFeedReady < 0.5 || _IntensityScore < 0.001 || _DesktopStrength <= 0.0))
                     return sceneColor;
+                float depth = _PassthroughMode > 0.5 ? clamp(_DesktopDepth, 0.0, 1.3) : 1.0;
                 float peripheralMask = PeripheralMask(uv);
                 float breathingWave = sin(_BreathingPhase + peripheralMask * 2.6) * 0.5 + 0.5;
 
                 float2 noiseUv = uv * lerp(7.0, 18.0, _ModeIndex) + float2(_BreathingPhase * 0.04, _BreathingPhase * 0.025);
                 float noiseA = Noise(noiseUv);
                 float noiseB = Noise(noiseUv * 1.7 + 19.37);
-                float wobble = ((noiseA - 0.5) + (noiseB - 0.5)) * peripheralMask * _DistortionAmount;
+                float wobble = ((noiseA - 0.5) + (noiseB - 0.5)) * peripheralMask * min(_DistortionAmount * depth, 0.05);
 
                 float2 radialDir = normalize(((uv * 2.0) - 1.0) + 1e-5);
                 float2 distortionOffset = radialDir * wobble * float2(1.0, 0.82);
@@ -212,7 +223,7 @@ Shader "CriticalVR/PassthroughTrip"
 
                 float pattern = Noise(noiseUv * 2.4 + edge * 5.0 + luminance * 3.0);
                 float patternMask = saturate(edge * 0.65 + highlightMask * 0.55 + peripheralMask * 0.35);
-                float patternLayer = saturate((pattern - 0.35) * 1.6) * _PatternAmount * patternMask;
+                float patternLayer = saturate((pattern - 0.35) * 1.6) * saturate(_PatternAmount * depth) * patternMask;
 
                 float3 edgeTint = _EdgeColor.rgb * edge * _EdgeGlow * (0.35 + peripheralMask * 0.8);
                 float3 atmosphere = _AtmosphereColor.rgb * _ColorAtmosphere * (0.15 + peripheralMask * 0.85);
@@ -231,7 +242,7 @@ Shader "CriticalVR/PassthroughTrip"
                 {
                     float coverage;
                     CameraUV(uv + distortionOffset, coverage);
-                    float opacity = min(saturate(_CameraMaximumOpacity), 0.6) * saturate(_IntensityScore) * coverage;
+                    float opacity = min(_CameraMaximumOpacity * clamp(_DesktopStrength, 0.0, 1.3), 0.6) * saturate(_IntensityScore) * coverage;
                     // Premultiplied overlay above native underlay, below virtual opaque content.
                     return half4(sceneColor.rgb + graded * opacity * (1-sceneColor.a),
                         sceneColor.a + opacity * (1-sceneColor.a));

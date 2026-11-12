@@ -46,6 +46,7 @@ namespace CriticalVR.EditorTools
             PlayerSettings.productName = "Critical-VR";
             PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, "com.qyam23.criticalvr");
             PlayerSettings.bundleVersion = "0.1.0";
+            PlayerSettings.SplashScreen.show = false;
             PlayerSettings.colorSpace = ColorSpace.Linear;
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
             PlayerSettings.runInBackground = false;

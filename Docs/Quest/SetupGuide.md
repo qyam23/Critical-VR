@@ -21,7 +21,7 @@ Run **Tools/quest_preflight.ps1** to inspect the expected editor, toolchain and 
 
 ## Synthetic room
 
-**CriticalVR > Preview > Create And Play Synthetic Room** creates/opens a separate synthetic scene and preview pipeline. Wait for the ten-second intro, then use the Inspector's debug intensity. Space/B/Y stops and suspends effects; R resumes. The prior scene, pipelines, XR initialization and background setting are restored on leaving Play Mode.
+**CriticalVR > Preview > Create And Play Synthetic Room** creates/opens a separate synthetic scene and preview pipeline. Wait for the seven-second intro, then use the Inspector's debug intensity. Space/B/Y stops and suspends effects; R resumes. The prior scene, pipelines, XR initialization and background setting are restored on leaving Play Mode.
 
 **CriticalVR > Preview > Run Automated Room Check** tests actual Unity runtime updates, motion-driven activation, decay, reset and explicit resume, and captures active/reset images through URP. Results are under **Builds/Quest/Logs/**. This is not passthrough-camera or headset verification.
 
@@ -34,6 +34,8 @@ powershell -NoProfile -File Tools\run_quest_checks.ps1
 The script runs Play Mode checks, production Quest validation and the development APK build in order, without bypassing validation. The older validate/build/install batch helpers remain available and also require the editor to be closed.
 
 ## Headset
+
+The [Windows console](../../Tools/QuestConsole/README.md) can install and start the development APK, control the effect, and collect motion samples over USB.
 
 Connect the Quest with a USB data cable and approve USB debugging inside it. Use the actual device model and Horizon OS to confirm camera compatibility. A developer account does not grant runtime camera permission or USB authorization.
 
