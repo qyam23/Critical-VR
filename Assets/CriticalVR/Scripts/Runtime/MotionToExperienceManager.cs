@@ -129,6 +129,17 @@ public class MotionToExperienceManager : MonoBehaviour
     private bool _hasBeenIntense;
     private bool _secondaryWasPressed;
     private bool _primaryWasPressed;
+#if UNITY_ANDROID && !UNITY_EDITOR
+    private struct PinchInput
+    {
+        public OVRPlugin.HandState HandState;
+        public bool Released;
+        public float HeldSeconds;
+    }
+
+    private PinchInput _leftPinch;
+    private PinchInput _rightPinch;
+#endif
     public bool EffectsSuspended { get; private set; }
     public event System.Action ResetRequested;
     public event System.Action ResumeRequested;
@@ -395,8 +406,6 @@ public class MotionToExperienceManager : MonoBehaviour
 #if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
         resumePressed |= Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame;
 #endif
-        if (resumePressed && EffectsSuspended && !_isResetting) ResumeExperience();
-
         #if UNITY_EDITOR
         #if ENABLE_INPUT_SYSTEM
         Keyboard keyboard = Keyboard.current;
@@ -416,11 +425,58 @@ public class MotionToExperienceManager : MonoBehaviour
             _secondaryWasPressed = secondaryPressed;
         }
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+        bool handStop = ReadPinch(OVRPlugin.Hand.HandLeft, ref _leftPinch, 0.25f);
+        bool handResume = ReadPinch(OVRPlugin.Hand.HandRight, ref _rightPinch, 1f);
+        resetPressed |= handStop && !EffectsSuspended;
+        resumePressed |= handResume && _leftPinch.HeldSeconds == 0f;
+#endif
+
         if (resetPressed && !_isResetting)
         {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (handStop) Debug.Log("[CriticalVR.Input] Left pinch stopped effects.");
+#endif
             ResetExperience();
         }
+        else if (resumePressed && EffectsSuspended && !_isResetting)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (handResume) Debug.Log("[CriticalVR.Input] Right pinch resumed effects.");
+#endif
+            ResumeExperience();
+        }
     }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+    private static bool ReadPinch(OVRPlugin.Hand hand, ref PinchInput input, float holdSeconds)
+    {
+        const OVRPlugin.HandStatus valid = OVRPlugin.HandStatus.HandTracked | OVRPlugin.HandStatus.InputStateValid;
+        if (!OVRManager.hasVrFocus || !OVRManager.hasInputFocus ||
+            !OVRPlugin.GetHandState(OVRPlugin.Step.Render, hand, ref input.HandState) ||
+            (input.HandState.Status & valid) != valid ||
+            (input.HandState.Status & OVRPlugin.HandStatus.SystemGestureInProgress) != 0 ||
+            input.HandState.HandConfidence != OVRPlugin.TrackingConfidence.High)
+        {
+            input.Released = false;
+            input.HeldSeconds = 0f;
+            return false;
+        }
+
+        if ((input.HandState.Pinches & OVRPlugin.HandFingerPinch.Index) == 0)
+        {
+            input.Released = true;
+            input.HeldSeconds = 0f;
+            return false;
+        }
+
+        if (!input.Released) return false;
+        input.HeldSeconds += Mathf.Min(Time.unscaledDeltaTime, 0.05f);
+        if (input.HeldSeconds < holdSeconds) return false;
+        input.Released = false;
+        return true;
+    }
+#endif
 
     public void ResetExperience()
     {

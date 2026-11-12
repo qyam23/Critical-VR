@@ -86,7 +86,7 @@ namespace CriticalVR.EditorTools
                 text.fontSize = 26;
                 text.alignment = TextAnchor.MiddleCenter;
                 text.raycastTarget = false;
-                text.text = "Critical-VR\nB / Y: stop effects    A / X: resume or retry";
+                text.text = "Critical-VR\nLeft pinch: stop | Hold right pinch: resume\nControllers: B/Y stop | A/X resume";
             }
             else text = statusRoot.GetComponentInChildren<UnityEngine.UI.Text>(true);
             bridgeSettings.FindProperty("statusText").objectReferenceValue = text;
@@ -108,6 +108,7 @@ namespace CriticalVR.EditorTools
             EditorUtility.SetDirty(metaFeature);
 
             var config = OVRProjectConfig.CachedProjectConfig;
+            config.handTrackingSupport = OVRProjectConfig.HandTrackingSupport.ControllersAndHands;
             config.insightPassthroughSupport = OVRProjectConfig.FeatureSupport.Required;
             config.isPassthroughCameraAccessEnabled = true;
             config.sceneSupport = OVRProjectConfig.FeatureSupport.None;
@@ -121,8 +122,10 @@ namespace CriticalVR.EditorTools
             AssetDatabase.SaveAssets();
             OVRManifestPreprocessor.GenerateOrUpdateAndroidManifest(silentMode: true);
             const string manifestPath = "Assets/Plugins/Android/AndroidManifest.xml";
-            if (!File.Exists(manifestPath) || !File.ReadAllText(manifestPath).Contains("horizonos.permission.HEADSET_CAMERA"))
-                throw new BuildFailedException("Meta manifest generator did not add HEADSET_CAMERA permission.");
+            string manifest = File.Exists(manifestPath) ? File.ReadAllText(manifestPath) : string.Empty;
+            if (!manifest.Contains("horizonos.permission.HEADSET_CAMERA") ||
+                !manifest.Contains("com.oculus.permission.HAND_TRACKING"))
+                throw new BuildFailedException("Meta manifest generator did not add camera and hand tracking permissions.");
             Debug.Log("CriticalVR: production rig, underlay, camera bridge, OpenXR feature and manifest configured. Hardware validation remains required.");
         }
     }

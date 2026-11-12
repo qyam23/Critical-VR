@@ -115,7 +115,7 @@ namespace CriticalVR
             _permissionPending = false;
             // Permission dialogs can change focus. Never resume effects implicitly.
             if (_focused && !experience.EffectsSuspended) TryStart();
-            else SetStatus("Permission granted. Press A/X to resume.");
+            else SetStatus("Permission granted. Hold right pinch or press A/X to resume.");
         }
 
         private void PermissionDenied(string permission)
@@ -133,7 +133,8 @@ namespace CriticalVR
                 statusText.gameObject.SetActive(!StereoFeedReady || experience.EffectsSuspended || Time.realtimeSinceStartup - _startedAt < 15f);
                 statusText.text = (experience.EffectsSuspended ? "Effects stopped. Your room is visible." :
                     StereoFeedReady ? "Critical-VR | Experimental camera effects" : "Your room is visible. Waiting for camera access.") +
-                    "\nB / Y: stop effects    A / X: resume or retry";
+                    "\nLeft pinch: stop | Hold right pinch: resume" +
+                    "\nControllers: B/Y stop | A/X resume";
             }
             if (!_starting) return;
             if (!OVRManager.hasVrFocus || !OVRManager.hasInputFocus || !OVRManager.isHmdPresent)

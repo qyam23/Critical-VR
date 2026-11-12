@@ -37,6 +37,10 @@ The script runs Play Mode checks, production Quest validation and the developmen
 
 Connect the Quest with a USB data cable and approve USB debugging inside it. Use the actual device model and Horizon OS to confirm camera compatibility. A developer account does not grant runtime camera permission or USB authorization.
 
-Install and launch the existing APK using **powershell -NoProfile -File Tools\install_quest_apk.ps1**. This locates the configured ADB, checks the authorized device/model, records its OS build and launches the app without rebuilding or closing Unity. Grant the application's camera prompt in the headset. **B/Y stops** and remains stopped; **A/X deliberately resumes** or retries. Denied permission, lost focus or stale/missing camera frames returns to native passthrough.
+Install and launch the existing APK using **powershell -NoProfile -File Tools\install_quest_apk.ps1**. This locates the configured ADB, checks the authorized device/model, records its OS build and launches the app without rebuilding or closing Unity. Grant the application's camera prompt in the headset.
+
+For hands, enable **Settings > Movement tracking > Hand and body tracking**. Touch thumb and index finger on the left hand for a short pinch to stop. Release, then hold the right-hand thumb and index finger together for one second to resume or retry. The app requires a tracked, released hand before accepting a new pinch. With controllers, **B/Y stops** and **A/X resumes**.
+
+The headset power button can put the headset to sleep. When the app loses focus or pauses, the camera effect stops. After returning, use the resume gesture or controller button. Denied permission and missing or stale camera frames also return to native passthrough.
 
 Read [CameraIntegration-2026-11-07.md](CameraIntegration-2026-11-07.md) for the source references, stereo projection limits, lifecycle handling and device checklist. The current per-eye camera projection uses a reference distance and is not depth-correct reconstructed passthrough. Device stereo alignment, near objects, visual comfort and sustained GPU/CPU timing require observation and measurements on the headset.

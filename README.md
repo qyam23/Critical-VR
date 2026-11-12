@@ -41,7 +41,7 @@ Open the repository itself as a Unity project.
 
 For a rendered synthetic-room test use `CriticalVR > Preview > Run Automated Room Check`. With the editor closed, `Tools\run_quest_checks.ps1` runs the room check, Quest validation and APK build without bypassing validation.
 
-**B/Y stops effects and remains stopped; A/X explicitly resumes.** Camera denial, stale frames or lost focus returns to native passthrough.
+**Left-hand pinch stops effects. Hold a right-hand pinch for one second to resume.** Enable hand tracking in the headset settings. With controllers, **B/Y stops** and **A/X resumes**. Camera denial, stale frames or lost focus returns to native passthrough.
 
 Read [SetupGuide.md](Docs/Quest/SetupGuide.md) and [CameraIntegration-2026-11-07.md](Docs/Quest/CameraIntegration-2026-11-07.md). The independent per-eye camera overlay uses calibrated reference-distance reprojection; it is experimental and is not depth-correct reconstructed passthrough. Device alignment, near objects, latency and performance need headset verification.
 
