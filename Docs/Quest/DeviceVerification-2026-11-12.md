@@ -12,4 +12,6 @@ The first permission dialog paused the experience. After relaunch with the grant
 - APK signature verification passed. The merged APK declares `HEADSET_CAMERA` and `com.oculus.permission.HAND_TRACKING`.
 - Output `Builds/Quest/Development/CriticalVR-Quest-Development.apk`, 199,055,687 bytes, SHA-256 `594deea5816148ab6981de8e38936bc84868fa378068732623c0d0607d398e3f`.
 
-The updated build is ready for installation. ADB requested headset authorization again after Unity closed. On-device gesture recognition remains to be checked by holding each pinch and observing the app's `CriticalVR.Input` events and the effect state.
+The updated build installed through ADB and launched on Quest 3S after USB debugging was authorized again. The SHA-256 hash of the installed base APK matched the build artifact. The app entered a focused OpenXR session, retained camera permission, and reported both 1280×960 camera textures. Hand-tracking permissions were granted. A short VrApi sample reported 72–73 FPS against a 72 Hz target.
+
+The first observation window contained no `CriticalVR.Input` gesture events. A physical gesture test remains pending. Hold the left pinch, release it, then hold the right pinch and check the effect state and the input events. Image alignment in each eye and comfort require observation in the headset.
