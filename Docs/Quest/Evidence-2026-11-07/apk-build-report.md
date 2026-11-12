@@ -1,0 +1,291 @@
+# Quest Build Report
+
+- Generated: `2026-11-07 18:15:36 UTC`
+- Result: `Succeeded`
+- Platform: `Android`
+- Output: `Builds/Quest/Development/CriticalVR-Quest-Development.apk`
+- Total size: `1885640130` bytes
+- Total time: `00:06:07.9797436`
+- Warnings: `8`
+- Errors: `0`
+- Validation report: `Docs/Quest/ValidationReport.latest.md`
+
+## Build Steps
+
+- `Build player`: `00:06:06.9371661`
+- `Preprocess Player`: `00:00:00.4985642`
+- `Prepare For Build`: `00:00:07.3842177`
+- `ProducePlayerScriptAssemblies`: `00:00:11.7099649`
+- `Prebuild Cleanup and Recompile`: `00:00:09.1031870`
+- `Compile scripts`: `00:00:08.8602448`
+- `Generate and validate platform script types`: `00:00:00.0333302`
+- `Verify Build setup`: `00:00:00.1879444`
+- `GetUnityAssemblies`: `00:00:00.0050894`
+- `GetPlayerAssemblies`: `00:00:00.0123187`
+- `Check old data build`: `00:00:00.1230225`
+- `Prepare assets for target platform`: `00:00:00.0046244`
+- `Prepare splash screen`: `00:00:00.0021332`
+- `Building scenes`: `00:00:01.6596884`
+- `Building scene Assets/CriticalVR/Scenes/CriticalVR_QuestCamera.unity`: `00:00:01.6596170`
+- `Build scripts DLLs`: `00:00:00.0415630`
+- `GetSystemAssemblies`: `00:00:00.0028281`
+- `Build GlobalGameManagers file`: `00:00:00.3024158`
+- `Writing asset files`: `00:00:03.3789294`
+- `Packaging assets - 0000000000000000f000000000000000`: `00:00:00.1942445`
+- `Packaging assets - 006a37b79bff05142be800c60f763300`: `00:00:00.0023993`
+- `Packaging assets - 0104bcdf786829a4db051983c25db03b`: `00:00:00.0022490`
+- `Packaging assets - 01b2fa7e15d7fcd47aecaaf527aa76cb`: `00:00:00.0019932`
+- `Packaging assets - 035463ec2f4a31a4da021198e2de3a5c`: `00:00:00.0021903`
+- `Packaging assets - 040cec7a13fa36c47bc7f06246a841b7`: `00:00:00.0017842`
+- `Packaging assets - 056e1087010c14410a1bb90f747b69de`: `00:00:00.0021870`
+- `Packaging assets - 065f54777bfd86d40a04e0ac5c2732b8`: `00:00:00.0023271`
+- `Packaging assets - 06d3b08a534b775429fbabd0f1e2a7a3`: `00:00:00.0019774`
+- `Packaging assets - 0704a9fbbeee2dd4ba7f239e1249dd97`: `00:00:00.4222459`
+- `Packaging assets - 07b0bfeb71a9979478d56ab8ff444325`: `00:00:00.0021012`
+- `Packaging assets - 089532af84b4a104abd5ee312d1fdf32`: `00:00:00.0019445`
+- `Packaging assets - 08e2bf926184d1946932e42684fa95c9`: `00:00:00.0019697`
+- `Packaging assets - 0998c00537177a446933b9be7c66e6c1`: `00:00:00.0020291`
+- `Packaging assets - 0b7b31db21cbfe2438ffa6619a73f25d`: `00:00:00.0022533`
+- `Packaging assets - 0f65d09d78bc32c4fa97a1f93c98fd16`: `00:00:00.0019167`
+- `Packaging assets - 0f84f8aa5cbe7d54994a144091998ab5`: `00:00:00.0020113`
+- `Packaging assets - 0fed9dcbe7bc3684ea51ae8f15ec0cbc`: `00:00:00.0021288`
+- `Packaging assets - 10a25524b0986f9488b430e2829bbbe8`: `00:00:00.5195810`
+- `Packaging assets - 127279d577f25ac4ea17dae3782e5074`: `00:00:00.0019222`
+- `Packaging assets - 12d8f34f5d5240844a9a05a03453125c`: `00:00:00.0019465`
+- `Packaging assets - 1765075aab1561e4ba556833a673e04e`: `00:00:00.0030184`
+- `Packaging assets - 17f3459c32dc227498a1829f9f790c6b`: `00:00:00.0019706`
+- `Packaging assets - 1afed23e34fad844aa3cb97baa303316`: `00:00:00.0022305`
+- `Packaging assets - 1c3acb827cbbd6548afd85eca833e826`: `00:00:00.0022744`
+- `Packaging assets - 1c87ab2ce8b8b304d98fbe9a734b1f74`: `00:00:00.0069020`
+- `Packaging assets - 1ce2db9504eb542e28d5e3f7175511c5`: `00:00:00.0021481`
+- `Packaging assets - 1d90b910cd5a4854598ecfe4f74358d1`: `00:00:00.0097507`
+- `Packaging assets - 2009be1469403a9498e04cd1bf89bb45`: `00:00:00.0020245`
+- `Packaging assets - 20553fac56ec59645857c0732b787431`: `00:00:00.0017307`
+- `Packaging assets - 205b4500344bafe4c9bce42169f9a5b1`: `00:00:00.0019524`
+- `Packaging assets - 220817b81adb42c4da8aad13f01aca8d`: `00:00:00.0020232`
+- `Packaging assets - 22c70bd01cccb124196ead2520faef26`: `00:00:00.0018221`
+- `Packaging assets - 2333b03e9d60e3046ad79ae605d3c264`: `00:00:00.0019041`
+- `Packaging assets - 25f195953a5441849b801692dcdeba97`: `00:00:00.0018479`
+- `Packaging assets - 261da8a5a0fb3084ea8ddd4cb08c2de3`: `00:00:00.0020930`
+- `Packaging assets - 277c9b54ca4893748af05e0451942021`: `00:00:00.0021249`
+- `Packaging assets - 28ac39a8e5009184d838d8e8c444bd6d`: `00:00:00.0067204`
+- `Packaging assets - 292042dfb9a345f47aab2870d08adbe0`: `00:00:00.0021957`
+- `Packaging assets - 293a92c673415c54baec8dd490b9c46d`: `00:00:00.0023073`
+- `Packaging assets - 2977fd6de579cd745be3c47a566b7255`: `00:00:00.0022506`
+- `Packaging assets - 2a542da50cb185745b812b4e160b0446`: `00:00:00.0019057`
+- `Packaging assets - 2bd7618c3fa0e4b4ab8e08dc3fadc376`: `00:00:00.0050650`
+- `Packaging assets - 2d019437ff89b8d44949727731cd9357`: `00:00:00.0054578`
+- `Packaging assets - 2df9ef29ef250f246b0c004cf4c2958a`: `00:00:00.5212629`
+- `Packaging assets - 32480d79d7cd39b4d90c897f3f36b573`: `00:00:00.0038788`
+- `Packaging assets - 326f7c58aed965d41bf7805a782d1e44`: `00:00:00.0062465`
+- `Packaging assets - 33b508a976bb84646ad925379689183f`: `00:00:00.0021959`
+- `Packaging assets - 33eeb3a3f1591a5448d6f067a61c4769`: `00:00:00.0025004`
+- `Packaging assets - 351ad3af70b133a42aa343667f1d715c`: `00:00:00.0019387`
+- `Packaging assets - 35c481a7e3cc7a64aa47cf08b21438de`: `00:00:00.0021828`
+- `Packaging assets - 36567a5bd7bff6043909dd4fef323cab`: `00:00:00.0019156`
+- `Packaging assets - 365a3b4e508fcef42863ed4bedffd3ed`: `00:00:00.0023810`
+- `Packaging assets - 365e4cb5e6c49dc4cadcc9eb2f3057ed`: `00:00:00.0022383`
+- `Packaging assets - 37ecabcf89b3cb245809c1a7b47054c9`: `00:00:00.0018419`
+- `Packaging assets - 38a07789c9e87004dad98c2909f58369`: `00:00:00.0034854`
+- `Packaging assets - 38ad33c152e32ee46a9bbbb0e656f7e1`: `00:00:00.0054246`
+- `Packaging assets - 397b3ea420565624c8a55d1d4477c3f7`: `00:00:00.0019088`
+- `Packaging assets - 3d782505b7e23d049b798228a4a2dbdf`: `00:00:00.0017382`
+- `Packaging assets - 3e14566d20cdda1419ea35cd3a9d68b5`: `00:00:00.0016174`
+- `Packaging assets - 3ec35b7a9db55664f9eaaf932536ed53`: `00:00:00.0017835`
+- `Packaging assets - 3ec670a991d71354094cee9f41930ee9`: `00:00:00.0024610`
+- `Packaging assets - 4238e3bce8f178244a8d1b3be05af945`: `00:00:00.0018808`
+- `Packaging assets - 42921d874eab5a54895565f219901846`: `00:00:00.0020012`
+- `Packaging assets - 464fed9ff0ea5314fb76515df4d3bd23`: `00:00:00.0024764`
+- `Packaging assets - 4827b635ffeff36449d82b4a5cfdaec7`: `00:00:00.0020257`
+- `Packaging assets - 48360662f0b5fac4badef7abc19c62bb`: `00:00:00.0020634`
+- `Packaging assets - 48fb043c850cadc4a883b53785e14c6e`: `00:00:00.0046503`
+- `Packaging assets - 497ef3520924e3e42a0660de8471727c`: `00:00:00.0029161`
+- `Packaging assets - 4bc9460a7e0a2cf4688f0507b740209a`: `00:00:00.0021686`
+- `Packaging assets - 4c57e437de61db14b93dce251548cc0c`: `00:00:00.0020208`
+- `Packaging assets - 4d713e4e8d360442eaa3e5a2d6d1b07d`: `00:00:00.0024225`
+- `Packaging assets - 502ec803763e1e841b7b3f6075bd1da6`: `00:00:00.0027504`
+- `Packaging assets - 5088d0220f0c4df439cf06c5c270eacb`: `00:00:00.0046739`
+- `Packaging assets - 509dce2f589693a4489d6e64bcd3070a`: `00:00:00.0019222`
+- `Packaging assets - 51e0e92724ea5ad499a3e4412f4b0ffb`: `00:00:00.0018287`
+- `Packaging assets - 5307b6417775bcc4b9ca0ffc75a6e125`: `00:00:00.0021136`
+- `Packaging assets - 5526903be7994124dae39fe89a67ebcc`: `00:00:00.0033547`
+- `Packaging assets - 561ccac587275c745aec500620f12fc7`: `00:00:00.0052481`
+- `Packaging assets - 59451abbb0f92a043a4a6def08f1aa9e`: `00:00:00.0025420`
+- `Packaging assets - 5a18cd4367f4642319879d29a3dad7db`: `00:00:00.0018748`
+- `Packaging assets - 5f03374eaa65dfc4b984e0973b9c7fe1`: `00:00:00.0017402`
+- `Packaging assets - 5f0ae599de45779409ea214bd557be5a`: `00:00:00.0019527`
+- `Packaging assets - 5f5e9f5cada8bb74fa25eddc0bf63908`: `00:00:00.0018361`
+- `Packaging assets - 621ef27076a2cba45aa592da96f50fa9`: `00:00:00.0019330`
+- `Packaging assets - 631d30b2c0e6c2b46824055562134208`: `00:00:00.0020807`
+- `Packaging assets - 6371000d850f05048a9d8ed13b457620`: `00:00:00.0018597`
+- `Packaging assets - 691b7dd79c9bde34f843687f962bba5a`: `00:00:00.0020349`
+- `Packaging assets - 6a3df62fc5123e84aa9d665c37534020`: `00:00:00.0022003`
+- `Packaging assets - 6a6ffa8871348b74d87a78d73ffc37c4`: `00:00:00.0024925`
+- `Packaging assets - 6b0a14bcef3f4b44bb9fe4ec7ed7d616`: `00:00:00.0019352`
+- `Packaging assets - 6ef46bfbed7e44344863c09a2a2c8f60`: `00:00:00.0018766`
+- `Packaging assets - 6f3f297cc9d4d1046927744a94c03a22`: `00:00:00.0018717`
+- `Packaging assets - 71ffc4686cef0764eab026ae8c49b282`: `00:00:00.0021178`
+- `Packaging assets - 72173267546bff843a322cc3b0bd7000`: `00:00:00.0021956`
+- `Packaging assets - 73817e6e5c844beaa39419a1f07bbeb0`: `00:00:00.0065038`
+- `Packaging assets - 73b14a507a5586244b105444c7487a42`: `00:00:00.0021933`
+- `Packaging assets - 74a5091d8707f334b9a5c31ef71a64ba`: `00:00:00.0020370`
+- `Packaging assets - 74aeefe52608ce2478007b4015c87831`: `00:00:00.0018605`
+- `Packaging assets - 766ac1e0b7302524484332ef3a8b3e94`: `00:00:00.0018352`
+- `Packaging assets - 768857b9733d8564384d1b601592ab9e`: `00:00:00.0019484`
+- `Packaging assets - 76d626b12360d6f4188cb8eb37f4bcdb`: `00:00:00.0019796`
+- `Packaging assets - 775e2f38067ee8246a3800bb7abd6713`: `00:00:00.0018897`
+- `Packaging assets - 77c185820dd1a464eac89cae3abccddf`: `00:00:00.0073050`
+- `Packaging assets - 78639c7c2b76e85429f8083b42d1c1e0`: `00:00:00.0021659`
+- `Packaging assets - 78a6bc0069534964abcdf5cc017ab46f`: `00:00:00.0019608`
+- `Packaging assets - 7a0568d5e3330b84687e307992be3030`: `00:00:00.0017127`
+- `Packaging assets - 7a1e00f5c0a8513418c4e461d47770fe`: `00:00:00.0052925`
+- `Packaging assets - 7bad868405b386c4fa06fed40e02c892`: `00:00:00.0021750`
+- `Packaging assets - 7bec66853a01d2443acccabf2acd28ae`: `00:00:00.0022419`
+- `Packaging assets - 7c0e5721ea9dafd4db94a6478e5b01a2`: `00:00:00.0020797`
+- `Packaging assets - 7c78b588b2e1f7c4a86ca4a985cf6e4a`: `00:00:00.0425376`
+- `Packaging assets - 7cb6da12a3b154de8b6acad301479be4`: `00:00:00.0022250`
+- `Packaging assets - 7e5c8b573ea14e5418c81d7bb7331269`: `00:00:00.0019033`
+- `Packaging assets - 7f06b07b26ec94549af0d034bf2b75c3`: `00:00:00.0023083`
+- `Packaging assets - 7f578c6d561477945ade1af77d8c3bc0`: `00:00:00.0026650`
+- `Packaging assets - 811ec4fe9ba454b448cc9754c7a5514d`: `00:00:00.0027442`
+- `Packaging assets - 840371c32bd32be4a853c82a6b368179`: `00:00:00.3447343`
+- `Packaging assets - 851b57887c97a574999a49d21718319f`: `00:00:00.0020705`
+- `Packaging assets - 8778e6b26b51c6a4999b94d7cacd8b5d`: `00:00:00.0027221`
+- `Packaging assets - 878c55397db099646a570eb89df2014f`: `00:00:00.0020044`
+- `Packaging assets - 881c99ae3ca0ba34284e777c78e8b48c`: `00:00:00.0021299`
+- `Packaging assets - 8aa87b27812afff4c9e5d10be3f1c58d`: `00:00:00.0020907`
+- `Packaging assets - 8b9183c4eccf42742a6837d4cc3aacee`: `00:00:00.0020818`
+- `Packaging assets - 8f43972ae06a0e848a6008e725a1852e`: `00:00:00.0019835`
+- `Packaging assets - 912d3a8ef3ddc0e4fa183d27348911d8`: `00:00:00.0032055`
+- `Packaging assets - 928d1ca04af80c84e8d5dabc18095d79`: `00:00:00.0513404`
+- `Packaging assets - 9291eb9cdba7cdb4a826d5aa5053a6e2`: `00:00:00.0023125`
+- `Packaging assets - 94afea5f242d72547979595ba963f335`: `00:00:00.0063728`
+- `Packaging assets - 9683f1d72d28108459e918388eab8449`: `00:00:00.0023014`
+- `Packaging assets - 983b2afa82fe6f048ac7540130ee3fed`: `00:00:00.0019390`
+- `Packaging assets - 988db55689193434fb0b3b89538f978f`: `00:00:00.0043230`
+- `Packaging assets - 988f44947b229ae439c8b13ecfc70e5f`: `00:00:00.0021022`
+- `Packaging assets - 9aa46566e1d86644c9a55e3037e935f6`: `00:00:00.0189491`
+- `Packaging assets - 9c95eb17bbcc4e545a4e4956c44d50b4`: `00:00:00.0025388`
+- `Packaging assets - 9ddf178d2c65ecd48849c4cab77ce2a2`: `00:00:00.0024370`
+- `Packaging assets - a196ffcfb15473049a4dffa9f40d95e7`: `00:00:00.0020079`
+- `Packaging assets - a1f48d059c0cea9448d04782a5d71e73`: `00:00:00.0019339`
+- `Packaging assets - a20bb0536e2e9574a859def7c947920a`: `00:00:00.0018662`
+- `Packaging assets - a2148203dd960814ca5db0c293ceda35`: `00:00:00.0027042`
+- `Packaging assets - a24132142f230dd47bf9aea98670f86a`: `00:00:00.0021187`
+- `Packaging assets - a31796e9e8816c7448b55d584c9417f1`: `00:00:00.0061203`
+- `Packaging assets - a61d422c346acbe40bfd63eae20b3455`: `00:00:00.0022663`
+- `Packaging assets - a674720496c1ed248a5b7ea3e22a11fd`: `00:00:00.0018073`
+- `Packaging assets - a7eda5a725c07314f825ae65a97f41cc`: `00:00:00.0019894`
+- `Packaging assets - a8577c885e80d8043946ac5b7abcf9a1`: `00:00:00.0199983`
+- `Packaging assets - a87cfaef648f17c41b568e842e068c51`: `00:00:00.0048346`
+- `Packaging assets - aa07d14bb6bb11245965a5a57219d12d`: `00:00:00.0021193`
+- `Packaging assets - aa5e2c7f1557f7a4da5bc151f244caca`: `00:00:00.0022738`
+- `Packaging assets - aa9ba2a2503cf7342ba3646d4840c15e`: `00:00:00.0020729`
+- `Packaging assets - ad83bc56407925d44a77a5bd01cd6783`: `00:00:00.0045258`
+- `Packaging assets - ade6b3a17ed0a4746817d8cf80732a9a`: `00:00:00.0024543`
+- `Packaging assets - ae00bb75e0cd5b04b8fe7fb4ab662629`: `00:00:00.0058491`
+- `Packaging assets - ae45425c7286fb84f8a10c53d5b8450d`: `00:00:00.0020938`
+- `Packaging assets - aea7043f33c23e84cbcceb8d098692df`: `00:00:00.0132618`
+- `Packaging assets - af6e401cf42ae7544ba79f31376121ef`: `00:00:00.0020793`
+- `Packaging assets - b028b7df44348a645ac25eb1ec401524`: `00:00:00.0020372`
+- `Packaging assets - b2da6b27df236b144b3516ed8e7d36ac`: `00:00:00.0034510`
+- `Packaging assets - b346b2a2df1d290438be3287b6419408`: `00:00:00.0069487`
+- `Packaging assets - b4cb7ee2f2ba4b84699e1647cf1dcc08`: `00:00:00.0021153`
+- `Packaging assets - b56dcea8083354dd3ae2e5700ce711f6`: `00:00:00.0123285`
+- `Packaging assets - b753b18a7e71a2441ad3e7a838e736f2`: `00:00:00.0025403`
+- `Packaging assets - b93114a1e47f7964e90ad709b803e765`: `00:00:00.0023841`
+- `Packaging assets - b9f4a123506bf497a8461b423bdbf67b`: `00:00:00.0144577`
+- `Packaging assets - ba7fa6f51d9856749bd051a142a30f58`: `00:00:00.0021017`
+- `Packaging assets - bab4ec8882962a84a92b5df6ea4a7e4d`: `00:00:00.0020641`
+- `Packaging assets - bb55a15fc0b8dd74a8d136ce74c060e3`: `00:00:00.0022970`
+- `Packaging assets - bcba4322bf653794bb4365dacc639ff2`: `00:00:00.0021762`
+- `Packaging assets - c190e168d52f31644a331513b7d4f466`: `00:00:00.0020694`
+- `Packaging assets - c2193d45b261d344c81e73d404b51604`: `00:00:00.0021180`
+- `Packaging assets - c2a53f5d01cef4362a6825d79fe087f7`: `00:00:00.0021592`
+- `Packaging assets - c2ec5f279a5edb648854dacc33f093c3`: `00:00:00.0021531`
+- `Packaging assets - c568b08fcbda9d641821d5980bebeeec`: `00:00:00.0022015`
+- `Packaging assets - c652d73c0ca0309478aeb69718c5a04c`: `00:00:00.0020756`
+- `Packaging assets - c6ef555a338fb004ea2e0fe97927eda0`: `00:00:00.0021698`
+- `Packaging assets - c7a98ee624e845e43bfd4912414de2b5`: `00:00:00.0021117`
+- `Packaging assets - c961697d198d60c49a13800fcf897b36`: `00:00:00.0028630`
+- `Packaging assets - c9cc56988de6c484c819bb4f5b50b200`: `00:00:00.0023366`
+- `Packaging assets - ca3e294656861a64b8aeeb9f916da0a9`: `00:00:00.0028530`
+- `Packaging assets - ca55f7df6b1cd4d5eb717932a921dc6a`: `00:00:00.0022250`
+- `Packaging assets - cc9f3aa25fb822143a31c106fcf1754c`: `00:00:00.0026892`
+- `Packaging assets - cd04d67b953674d4ab85f4d35d4f1338`: `00:00:00.0027737`
+- `Packaging assets - cd7bb81df5b74b34dadbf531f381a26b`: `00:00:00.0020700`
+- `Packaging assets - ce347ad101f41ee4ab5c3fbc0ea447db`: `00:00:00.0044189`
+- `Packaging assets - ce91aa271d3b89541b89eb573815ce4e`: `00:00:00.0026602`
+- `Packaging assets - ced943c76cb8fb8489bab18c3dfcdcd3`: `00:00:00.0056273`
+- `Packaging assets - cf6cbdd672089a84796e55a21fed1cbe`: `00:00:00.0067805`
+- `Packaging assets - d1818ad699c72684b939b7a5c00d9745`: `00:00:00.0024645`
+- `Packaging assets - d198f13a14489314390117597cfe632a`: `00:00:00.0022763`
+- `Packaging assets - d1ce1915b89aa664b9d5cff3403f7e8c`: `00:00:00.0024884`
+- `Packaging assets - d2c7393e2a7d820499c5582561d4bc0b`: `00:00:00.0022094`
+- `Packaging assets - d3770aaa3bbd8384aabab9ddd383e21e`: `00:00:00.0030020`
+- `Packaging assets - d41643656a33c914989fa12938890821`: `00:00:00.0021751`
+- `Packaging assets - d47f009476100f545971a81ede14c750`: `00:00:00.0062679`
+- `Packaging assets - d487bff672149044ea5597fc8ddccce4`: `00:00:00.0023824`
+- `Packaging assets - d49e78756811bfa4aafb8b6535417991`: `00:00:00.0020458`
+- `Packaging assets - d5ad393ef9361de40ac8a477031b72d4`: `00:00:00.0180589`
+- `Packaging assets - d6708eb99dec8334fb83db57b764097a`: `00:00:00.0417320`
+- `Packaging assets - d6d7a15e382e8994386c8b07efcdcbfb`: `00:00:00.0023963`
+- `Packaging assets - d7208c116513cfb42be02397e2c5167e`: `00:00:00.0023662`
+- `Packaging assets - d7b7c71c81d721f439d51761df04d4d6`: `00:00:00.0023615`
+- `Packaging assets - d8ad05ac94ef0214caf92a3a0f0ffed3`: `00:00:00.0023120`
+- `Packaging assets - d8ae9fb21d28683468f714f6353fbfb0`: `00:00:00.0030817`
+- `Packaging assets - d8c744701b43c864b88e7f8144e19bc5`: `00:00:00.0064439`
+- `Packaging assets - d92fe6a5bdb9c6044a2b9b0326b472ba`: `00:00:00.0021783`
+- `Packaging assets - d93000b3a5544f42808dee914d9768c9`: `00:00:00.0033309`
+- `Packaging assets - d98f3cc8c5cb5e44780d00ebf4c01169`: `00:00:00.0023579`
+- `Packaging assets - daa46a58178a6ad41ae1ddc2dc7f856d`: `00:00:00.0102707`
+- `Packaging assets - dc0f88987826e6e48b1fe9c7c2b53a53`: `00:00:00.0027004`
+- `Packaging assets - dd7dc344b935e204bb54ffc198f84f33`: `00:00:00.0023300`
+- `Packaging assets - ddf6cf0da5162514ea4bd7de37fc051a`: `00:00:00.0021499`
+- `Packaging assets - df44fb1624687a94198a7555c8120c3d`: `00:00:00.0024322`
+- `Packaging assets - e2c05bd91fdecba419d8f69c6ce3720e`: `00:00:00.0028402`
+- `Packaging assets - e30dffc674b755c43a47418efdc90868`: `00:00:00.0028191`
+- `Packaging assets - e3fd51c9b85e4e648869e165e2d055c4`: `00:00:00.0024623`
+- `Packaging assets - e434f5a0ea434c04895bbc3ddb875d2a`: `00:00:00.0025080`
+- `Packaging assets - e44bbb09d003b56438175eac75f2bb02`: `00:00:00.0024594`
+- `Packaging assets - e573049ff9ccfbd42b99cf4d9be67ca0`: `00:00:00.0024532`
+- `Packaging assets - e60bd33cc9b29c14d91e9d97c03ab837`: `00:00:00.0025496`
+- `Packaging assets - e817b962f95e9694c9a2c22c6c3fe710`: `00:00:00.0021387`
+- `Packaging assets - e9e8baa119764114b912fba2c5e00561`: `00:00:00.0024543`
+- `Packaging assets - ea01a06de0eb1304faac01aa8b4a1a79`: `00:00:00.0024610`
+- `Packaging assets - eaeac9ce83896a04691d2590189776f5`: `00:00:00.0237625`
+- `Packaging assets - efe55bc58e44ce0439dc4f47e3266bd6`: `00:00:00.0027402`
+- `Packaging assets - f174f11f6249c25478110c0e685a6499`: `00:00:00.0022373`
+- `Packaging assets - f22bcc84a5f4a1944b075a2c4ac71493`: `00:00:00.0053706`
+- `Packaging assets - f304d76740531394b8e88c127a34e922`: `00:00:00.0021969`
+- `Packaging assets - f370e1e1d6d453944ad4eef495d46a4c`: `00:00:00.0021023`
+- `Packaging assets - f3ee8c679c1070f4cbc8eabdabb14584`: `00:00:00.0023137`
+- `Packaging assets - f61a8ec5c53caa842ac01acee8fba8b3`: `00:00:00.0020330`
+- `Packaging assets - f66fcb9802ce5ab41a6469acf34a53ca`: `00:00:00.0055694`
+- `Packaging assets - f6b1a0fe75d5009449cf55ae76220e2b`: `00:00:00.0030870`
+- `Packaging assets - f6ce33b91f6ffe54cadacbf4bb112440`: `00:00:00.0031021`
+- `Packaging assets - f72c67f269ed84db085f2e61c57440e4`: `00:00:00.0022064`
+- `Packaging assets - f7f5e36797cf0c1408561665c67b179b`: `00:00:00.0022579`
+- `Packaging assets - fd41edc4e8aea504f9328eb018e52376`: `00:00:00.0021592`
+- `Packaging assets - fdb8a29b299be024f9d07581d18cfae4`: `00:00:00.0021961`
+- `Packaging assets - fe23f0b1bc00bc7418f46d06749ce418`: `00:00:00.0022587`
+- `Packaging assets - ff654c2398e36a7489bc66b69924a1b2`: `00:00:00.0024692`
+- `Packaging assets - globalgamemanagers.assets`: `00:00:00.3443159`
+- `Packaging assets - sharedassets0.assets = additional assets for scene 0: Assets/CriticalVR/Scenes/CriticalVR_QuestCamera.unity`: `00:00:00.0081926`
+- `Building Resources/unity_builtin_extra`: `00:00:00.3194147`
+- `Write data build dirty tracking information`: `00:00:00.3831259`
+- `Postprocess built player`: `00:05:38.6757633`
+- `Initializing`: `00:00:00.0014154`
+- `Check gradle project collisions`: `00:00:00.0003126`
+- `Preparing banner`: `00:00:00.0004902`
+- `Setup incremental player build`: `00:00:00.0675671`
+- `Incremental player build`: `00:04:04.7345433`
+- `Report output files`: `00:00:00.4159729`
+- `Calling IPostGenerateGradleAndroidProject callbacks`: `00:00:00.6926305`
+- `Validate Gradle Project`: `00:00:00.0007819`
+- `Unity Services Symbol Upload`: `00:00:00.0002890`
+- `Building Gradle project`: `00:01:29.4853953`
+- `Building Gradle Symbols`: `00:00:00.0002752`
+- `Processing Mapping File`: `00:00:00.0002770`
+- `Moving output package(s)`: `00:00:00.0565791`
+- `Checking Symbols size`: `00:00:00.0007892`

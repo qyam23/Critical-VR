@@ -146,7 +146,106 @@ namespace CriticalVR.EditorTools
             ValidateAndroidSettings(report);
             ValidateXRSettings(report);
             ValidateMetaQuestReadiness(report);
+            ValidateCameraIntegration(report);
+            ValidateMetaProjectSetup(report, attemptAutoFix);
             return report;
+        }
+
+        private static void ValidateMetaProjectSetup(CriticalVRValidationReport report, bool autoFix)
+        {
+            // The SDK registry is internal. Inspect its real required tasks instead of reproducing them.
+            var getTasks = typeof(OVRProjectSetup).GetMethod("GetTasks", BindingFlags.Static | BindingFlags.NonPublic);
+            if (getTasks == null)
+            {
+                report.Add(CriticalVRValidationSeverity.Error, "meta.setupRegistry", "Meta Project Setup task registry was not found.", "Check the installed SDK version.");
+                return;
+            }
+            var tasks = ((System.Collections.IEnumerable)getTasks.Invoke(null, new object[] { BuildTargetGroup.Android })).Cast<object>().ToArray();
+            for (int pass = 0; pass < (autoFix ? 4 : 1); pass++)
+            {
+                foreach (object task in tasks)
+                {
+                    Type type = task.GetType();
+                    type.GetMethod("InvalidateCache").Invoke(task, new object[] { BuildTargetGroup.Android });
+                    var isDone = (Func<BuildTargetGroup, bool>)type.GetProperty("IsDone").GetValue(task);
+                    object level = type.GetProperty("Level").GetValue(task);
+                    string severity = level.GetType().GetMethod("GetValue").Invoke(level, new object[] { BuildTargetGroup.Android }).ToString();
+                    if (severity != "Required" || isDone(BuildTargetGroup.Android)) continue;
+                    if (IsSceneRecommendationForCameraOnlyScene(task)) continue;
+                    var fix = type.GetProperty("FixAction").GetValue(task) as Action<BuildTargetGroup>;
+                    if (autoFix && fix != null) fix(BuildTargetGroup.Android);
+                }
+            }
+            OVRManifestPreprocessor.GenerateOrUpdateAndroidManifest(silentMode: true);
+            foreach (object task in tasks)
+            {
+                Type type = task.GetType();
+                type.GetMethod("InvalidateCache").Invoke(task, new object[] { BuildTargetGroup.Android });
+                var isDone = (Func<BuildTargetGroup, bool>)type.GetProperty("IsDone").GetValue(task);
+                if (isDone(BuildTargetGroup.Android)) continue;
+                object level = type.GetProperty("Level").GetValue(task);
+                string severity = level.GetType().GetMethod("GetValue").Invoke(level, new object[] { BuildTargetGroup.Android }).ToString();
+                if (severity != "Required") continue;
+                object message = type.GetProperty("Message").GetValue(task);
+                string detail = message.GetType().GetMethod("GetValue").Invoke(message, new object[] { BuildTargetGroup.Android }).ToString();
+                if (IsSceneRecommendationForCameraOnlyScene(task))
+                {
+                    report.Add(CriticalVRValidationSeverity.Warning, "meta.mrukSceneRecommendation",
+                        "MRUK 85's generic rule remains unsatisfied: " + detail + ". This camera-only scene contains no MRUK scene manager, OVRSceneManager or spatial anchors. PCA itself checks HEADSET_CAMERA only. Scene/anchor support and permissions are deliberately absent. The SDK task was evaluated and was not ignored or marked fixed.",
+                        "If room reconstruction or spatial anchors are introduced, enable their support/permissions and satisfy the rule. See CameraIntegration-2026-11-07.md for this scoped applicability decision.");
+                    continue;
+                }
+                report.Add(CriticalVRValidationSeverity.Error, "meta.requiredTask", detail, "Resolve this Meta Project Setup requirement before building.");
+            }
+            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            EditorSceneManager.SaveOpenScenes();
+            AssetDatabase.SaveAssets();
+        }
+
+        private static bool IsSceneRecommendationForCameraOnlyScene(object task)
+        {
+            object message = task.GetType().GetProperty("Message").GetValue(task);
+            string text = message.GetType().GetMethod("GetValue").Invoke(message, new object[] { BuildTargetGroup.Android }).ToString();
+            return text == "MR Utility Kit recommends Scene Support to be set to \"Required\"" &&
+                UnityEngine.Object.FindFirstObjectByType<QuestPassthroughCameraBridge>() != null &&
+                UnityEngine.Object.FindFirstObjectByType<Meta.XR.MRUtilityKit.MRUK>(FindObjectsInactive.Include) == null &&
+                UnityEngine.Object.FindFirstObjectByType<OVRSceneManager>(FindObjectsInactive.Include) == null &&
+                UnityEngine.Object.FindFirstObjectByType<OVRSpatialAnchor>(FindObjectsInactive.Include) == null;
+        }
+
+        private static void ValidateCameraIntegration(CriticalVRValidationReport report)
+        {
+            var bridge = UnityEngine.Object.FindFirstObjectByType<QuestPassthroughCameraBridge>();
+            if (bridge == null)
+            {
+                report.Add(CriticalVRValidationSeverity.Error, "camera.bridgeMissing", "Production stereo camera bridge is missing.", "Run Quest bootstrap.");
+                return;
+            }
+            var settings = new SerializedObject(bridge);
+            foreach (string field in new[] { "effectMaterial", "experience", "eyeCamera" })
+                if (settings.FindProperty(field).objectReferenceValue == null)
+                    report.Add(CriticalVRValidationSeverity.Error, "camera.reference." + field, "Camera bridge reference missing: " + field, "Run Quest bootstrap.");
+            var eye = settings.FindProperty("eyeCamera").objectReferenceValue as Camera;
+            if (eye != null && (eye.clearFlags != CameraClearFlags.SolidColor || eye.backgroundColor.a > 0f))
+                report.Add(CriticalVRValidationSeverity.Error, "camera.opaqueBackground", "Eye camera must clear transparent for native underlay fallback.", "Run Quest bootstrap.");
+            string manifestPath = CriticalVRProjectPaths.ToAbsolutePath("Assets/Plugins/Android/AndroidManifest.xml");
+            if (!File.Exists(manifestPath) || !File.ReadAllText(manifestPath).Contains("horizonos.permission.HEADSET_CAMERA"))
+                report.Add(CriticalVRValidationSeverity.Error, "camera.permissionMissing", "Generated Android manifest lacks HEADSET_CAMERA.", "Run Meta setup and regenerate the manifest.");
+            var xr = OpenXRSettings.GetSettingsForBuildTargetGroup(BuildTargetGroup.Android);
+            var feature = xr == null ? null : xr.GetFeature<Meta.XR.MetaXRFeature>();
+            if (feature == null || !feature.enabled)
+                report.Add(CriticalVRValidationSeverity.Error, "camera.metaOpenXRDisabled", "Meta XR OpenXR feature is missing or disabled.", "Run Quest bootstrap after package import.");
+            var layer = UnityEngine.Object.FindFirstObjectByType<OVRPassthroughLayer>();
+            if (layer != null && layer.overlayType != OVROverlay.OverlayType.Underlay)
+                report.Add(CriticalVRValidationSeverity.Error, "camera.underlay", "Passthrough must use Underlay composition.", "Run Quest bootstrap.");
+            if (EditorBuildSettings.scenes.Any(scene => scene.enabled && scene.path != CriticalVRProjectPaths.ScenePath))
+                report.Add(CriticalVRValidationSeverity.Error, "build.previewScene", "An enabled build scene is outside the Quest scene allowlist.", "Run Quest bootstrap.");
+            Shader shader = Shader.Find(CriticalVRProjectPaths.ShaderPath);
+            if (shader == null || ShaderUtil.ShaderHasError(shader))
+                report.Add(CriticalVRValidationSeverity.Error, "camera.shader", "Effect shader is missing or has compiler errors.", "Inspect Unity shader compiler messages.");
+            report.Add(CriticalVRValidationSeverity.Warning, "camera.hardwareUnverified",
+                "Static validation cannot verify device permission, frame pairing, per-eye alignment, near-object parallax or sustained GPU time. Reference-distance reprojection is approximate.",
+                "Run the device checklist on a Quest 3/3S. Never treat a green static report as headset verification.");
         }
 
         internal static void WriteReport(CriticalVRValidationReport report, string relativePath)
@@ -227,6 +326,10 @@ namespace CriticalVR.EditorTools
             }
             else
             {
+                if (material.GetTag("RenderPipeline", false) != "UniversalPipeline")
+                    report.Add(CriticalVRValidationSeverity.Error, "shader.pipelineTag",
+                        "Effect shader does not declare URP's UniversalPipeline tag; SRP build stripping can remove every variant.",
+                        "Set the shader SubShader RenderPipeline tag to UniversalPipeline and rebuild.");
                 report.Add(CriticalVRValidationSeverity.Info, "rendererFeature.ok", $"Renderer feature is attached with material `{material.name}`.", "No action required.");
             }
         }
@@ -269,6 +372,10 @@ namespace CriticalVR.EditorTools
 
         private static void ValidateAndroidSettings(CriticalVRValidationReport report)
         {
+            var playerSettings = Resources.FindObjectsOfTypeAll<PlayerSettings>().FirstOrDefault();
+            var inputHandler = playerSettings == null ? null : new SerializedObject(playerSettings).FindProperty("activeInputHandler");
+            if (inputHandler == null || inputHandler.intValue != 1)
+                report.Add(CriticalVRValidationSeverity.Error, "android.inputSystem", "Android requires Input System only; Both is unsupported.", "Set Active Input Handling to Input System Package (New), save and restart Unity before building.");
             if (!BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.Android, BuildTarget.Android))
             {
                 report.Add(CriticalVRValidationSeverity.Error, "android.supportMissing", "This Unity installation does not report Android build support for the current editor.", "Install Android Build Support in Unity Hub or use a Unity editor that includes Android support.");

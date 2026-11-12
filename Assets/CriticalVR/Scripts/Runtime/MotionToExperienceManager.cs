@@ -1,7 +1,9 @@
-using System;
 using System.Collections;
-using System.Reflection;
 using UnityEngine;
+using UnityEngine.XR;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 /// <summary>
 /// Converts headset motion into a comfort-aware intensity model for Quest passthrough effects.
@@ -55,7 +57,8 @@ public class MotionToExperienceManager : MonoBehaviour
 
     [Header("Experience")]
     [SerializeField] private ExperienceMode mode = ExperienceMode.Psychedelic;
-    [SerializeField, Min(5f)] private float sessionIntroDuration = 10f;
+    public const float DefaultIntroDuration = 7f;
+    [SerializeField, Min(1.5f)] private float sessionIntroDuration = DefaultIntroDuration;
     [SerializeField, Range(0.35f, 1f)] private float centerStabilityAtPeak = 0.7f;
     [SerializeField, Range(0.5f, 1.25f)] private float peripheralWeightAtPeak = 0.98f;
 
@@ -125,11 +128,28 @@ public class MotionToExperienceManager : MonoBehaviour
     private bool _isResetting;
     private bool _experienceActive;
     private bool _hasBeenIntense;
+    private bool _secondaryWasPressed;
+    private bool _primaryWasPressed;
+#if UNITY_ANDROID && !UNITY_EDITOR
+    private struct PinchInput
+    {
+        public OVRPlugin.HandState HandState;
+        public bool Released;
+        public float HeldSeconds;
+    }
+
+    private PinchInput _leftPinch;
+    private PinchInput _rightPinch;
+#endif
+    public bool EffectsSuspended { get; private set; }
+    public event System.Action ResetRequested;
+    public event System.Action ResumeRequested;
     private ExperienceState _currentState = ExperienceState.Calm;
 
     public float IntensityScore => _intensityScore;
     public ExperienceState CurrentState => _currentState;
     public float SessionReveal => 1f - _introFade;
+    private bool _introFrameStarted;
 
     private void Awake()
     {
@@ -165,7 +185,18 @@ public class MotionToExperienceManager : MonoBehaviour
             return;
         }
 
-        StepSessionIntro(Time.deltaTime);
+        if (_introFade > 0f && CanAdvanceIntro())
+        {
+            if (_introFrameStarted) StepSessionIntro(Time.unscaledDeltaTime);
+            _introFrameStarted = true;
+        }
+        else _introFrameStarted = false;
+        if (EffectsSuspended)
+        {
+            RebaseMotion();
+            ApplyMaterialProperties();
+            return;
+        }
         StepMotion(Time.deltaTime);
         UpdateStateMachine(Time.deltaTime);
         UpdateVisualLayers(Time.deltaTime);
@@ -176,7 +207,16 @@ public class MotionToExperienceManager : MonoBehaviour
     {
         _sessionElapsed += dt;
         float reveal = Mathf.Clamp01(_sessionElapsed / Mathf.Max(0.01f, sessionIntroDuration));
-        _introFade = 1f - reveal;
+        _introFade = 1f - Mathf.SmoothStep(0f, 1f, reveal);
+    }
+
+    private static bool CanAdvanceIntro()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        return OVRManager.hasVrFocus && OVRManager.hasInputFocus;
+#else
+        return true;
+#endif
     }
 
     private void StepMotion(float dt)
@@ -188,6 +228,7 @@ public class MotionToExperienceManager : MonoBehaviour
 
         if (_introFade > 0f)
         {
+            RebaseMotion();
             _smoothedMotion = Mathf.Lerp(_smoothedMotion, 0f, 1f - Mathf.Exp(-4f * dt));
             _motionHistory = Mathf.Lerp(_motionHistory, 0f, 1f - Mathf.Exp(-3f * dt));
             _burstEnergy = Mathf.Lerp(_burstEnergy, 0f, 1f - Mathf.Exp(-4f * dt));
@@ -266,7 +307,7 @@ public class MotionToExperienceManager : MonoBehaviour
 
         _intensityScore *= Mathf.Exp(-(baseDecayRate * decayScale) * dt);
 
-        if (_intensityScore >= 0.78f)
+        if (rawMotion >= 0.78f && _intensityScore >= 0.78f)
         {
             _peakHoldTimer = intenseHoldDuration;
             _hasBeenIntense = true;
@@ -375,9 +416,19 @@ public class MotionToExperienceManager : MonoBehaviour
     private void HandleResetInput()
     {
         bool resetPressed = false;
-
+        bool primaryPressed = PrimaryPressed(XRNode.LeftHand) || PrimaryPressed(XRNode.RightHand);
+        bool resumePressed = primaryPressed && !_primaryWasPressed;
+        _primaryWasPressed = primaryPressed;
+#if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
+        resumePressed |= Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame;
+#endif
         #if UNITY_EDITOR
+        #if ENABLE_INPUT_SYSTEM
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null && (keyboard.spaceKey.wasPressedThisFrame || keyboard.bKey.wasPressedThisFrame || keyboard.yKey.wasPressedThisFrame))
+        #else
         if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.B) || Input.GetKeyDown(KeyCode.Y))
+        #endif
         {
             resetPressed = true;
         }
@@ -385,19 +436,82 @@ public class MotionToExperienceManager : MonoBehaviour
 
         if (!resetPressed)
         {
-            resetPressed = TryGetMetaControllerReset();
+            bool secondaryPressed = SecondaryPressed(XRNode.LeftHand) || SecondaryPressed(XRNode.RightHand);
+            resetPressed = secondaryPressed && !_secondaryWasPressed;
+            _secondaryWasPressed = secondaryPressed;
         }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        bool handStop = ReadPinch(OVRPlugin.Hand.HandLeft, ref _leftPinch, 0.25f);
+        bool handResume = ReadPinch(OVRPlugin.Hand.HandRight, ref _rightPinch, 1f);
+        resetPressed |= handStop && !EffectsSuspended;
+        resumePressed |= handResume && _leftPinch.HeldSeconds == 0f;
+#endif
 
         if (resetPressed && !_isResetting)
         {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (handStop) Debug.Log("[CriticalVR.Input] Left pinch stopped effects.");
+#endif
             ResetExperience();
+        }
+        else if (resumePressed && EffectsSuspended && !_isResetting)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (handResume) Debug.Log("[CriticalVR.Input] Right pinch resumed effects.");
+#endif
+            ResumeExperience();
         }
     }
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+    private static bool ReadPinch(OVRPlugin.Hand hand, ref PinchInput input, float holdSeconds)
+    {
+        const OVRPlugin.HandStatus valid = OVRPlugin.HandStatus.HandTracked | OVRPlugin.HandStatus.InputStateValid;
+        if (!OVRManager.hasVrFocus || !OVRManager.hasInputFocus ||
+            !OVRPlugin.GetHandState(OVRPlugin.Step.Render, hand, ref input.HandState) ||
+            (input.HandState.Status & valid) != valid ||
+            (input.HandState.Status & OVRPlugin.HandStatus.SystemGestureInProgress) != 0 ||
+            input.HandState.HandConfidence != OVRPlugin.TrackingConfidence.High)
+        {
+            input.Released = false;
+            input.HeldSeconds = 0f;
+            return false;
+        }
+
+        if ((input.HandState.Pinches & OVRPlugin.HandFingerPinch.Index) == 0)
+        {
+            input.Released = true;
+            input.HeldSeconds = 0f;
+            return false;
+        }
+
+        if (!input.Released) return false;
+        input.HeldSeconds += Mathf.Min(Time.unscaledDeltaTime, 0.05f);
+        if (input.HeldSeconds < holdSeconds) return false;
+        input.Released = false;
+        return true;
+    }
+#endif
+
     public void ResetExperience()
     {
+        EffectsSuspended = true;
+        useDebugSlider = false;
+        // Camera imagery is removed immediately; virtual layers finish their smooth release.
+        _introFade = 0f;
+        _sessionElapsed = sessionIntroDuration;
+        ResetRequested?.Invoke();
         StopAllCoroutines();
         StartCoroutine(FadeOutRoutine());
+    }
+
+    public void ResumeExperience()
+    {
+        if (_isResetting) return;
+        ClearRuntimeState();
+        EffectsSuspended = false;
+        ResumeRequested?.Invoke();
     }
 
     private IEnumerator FadeOutRoutine()
@@ -463,6 +577,7 @@ public class MotionToExperienceManager : MonoBehaviour
         _hasBeenIntense = false;
         _currentState = ExperienceState.Calm;
 
+        RebaseMotion();
         _sampleCount = 0;
         _sampleIndex = 0;
         _sampleSum = 0f;
@@ -503,61 +618,31 @@ public class MotionToExperienceManager : MonoBehaviour
         return ExpLerp(current, target, speed, dt);
     }
 
-    private bool TryGetMetaControllerReset()
+    private static bool SecondaryPressed(XRNode hand)
     {
-        try
-        {
-            Type ovrInputType = FindType("OVRInput");
-            if (ovrInputType == null)
-            {
-                return false;
-            }
-
-            Type controllerEnum = ovrInputType.GetNestedType("Controller", BindingFlags.Public);
-            Type buttonEnum = ovrInputType.GetNestedType("Button", BindingFlags.Public);
-            if (controllerEnum == null || buttonEnum == null)
-            {
-                return false;
-            }
-
-            MethodInfo getActiveController = ovrInputType.GetMethod("GetActiveController", BindingFlags.Public | BindingFlags.Static);
-            MethodInfo getDown = ovrInputType.GetMethod("GetDown", BindingFlags.Public | BindingFlags.Static, null, new[] { buttonEnum }, null);
-            if (getActiveController == null || getDown == null)
-            {
-                return false;
-            }
-
-            object noneController = Enum.Parse(controllerEnum, "None");
-            object activeController = getActiveController.Invoke(null, null);
-            if (activeController == null || activeController.Equals(noneController))
-            {
-                return false;
-            }
-
-            object buttonTwo = Enum.Parse(buttonEnum, "Two");
-            object buttonFour = Enum.Parse(buttonEnum, "Four");
-            bool pressedTwo = (bool)getDown.Invoke(null, new[] { buttonTwo });
-            bool pressedFour = (bool)getDown.Invoke(null, new[] { buttonFour });
-            return pressedTwo || pressedFour;
-        }
-        catch
-        {
-            return false;
-        }
+        UnityEngine.XR.InputDevice device = InputDevices.GetDeviceAtXRNode(hand);
+        return device.isValid && device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.secondaryButton, out bool pressed) && pressed;
     }
 
-    private static Type FindType(string typeName)
+    private static bool PrimaryPressed(XRNode hand)
     {
-        foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            Type type = assembly.GetType(typeName);
-            if (type != null)
-            {
-                return type;
-            }
-        }
+        UnityEngine.XR.InputDevice device = InputDevices.GetDeviceAtXRNode(hand);
+        return device.isValid && device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out bool pressed) && pressed;
+    }
 
-        return null;
+    private void RebaseMotion()
+    {
+        if (centerEyeAnchor == null) return;
+        _lastPosition = centerEyeAnchor.position;
+        _lastRotation = centerEyeAnchor.rotation;
+        _lastVelocity = Vector3.zero;
+    }
+
+    private void OnApplicationFocus(bool focused)
+    {
+        // Desktop preview deliberately ticks in background; headset focus loss must suspend.
+        if (!focused && SessionReveal >= 1f && isActiveAndEnabled && !Application.isEditor) ResetExperience();
+        RebaseMotion();
     }
 
     [ContextMenu("Trigger Reset")]

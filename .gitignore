@@ -37,3 +37,9 @@ Tools/WebSimulator/dist/
 Tools/WebSimulator/node_modules/
 Assets/Resources/PerformanceTestRunInfo.json
 Assets/Resources/PerformanceTestRunSettings.json
+Assets/Resources/PerformanceTestRunInfo.json.meta
+Assets/Resources/PerformanceTestRunSettings.json.meta
+Assets/Resources/OVRPlatformToolSettings.asset
+Assets/Resources/OVRPlatformToolSettings.asset.meta
+# Unity Android GameActivity CMake intermediates
+/.utmp/

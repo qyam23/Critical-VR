@@ -70,7 +70,8 @@ namespace CriticalVR.EditorTools
 
             BuildPlayerOptions options = new BuildPlayerOptions
             {
-                scenes = EditorBuildSettingsScene.GetActiveSceneList(EditorBuildSettings.scenes),
+                // Explicit allowlist prevents a saved desktop-preview scene entering the APK.
+                scenes = new[] { CriticalVRProjectPaths.ScenePath },
                 locationPathName = CriticalVRProjectPaths.ToAbsolutePath(relativeOutputPath),
                 target = BuildTarget.Android,
                 targetGroup = BuildTargetGroup.Android,

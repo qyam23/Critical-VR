@@ -16,15 +16,18 @@ using UnityEngine.XR.OpenXR;
 
 namespace CriticalVR.EditorTools
 {
+    [InitializeOnLoad]
     public static class CriticalVRProjectBootstrap
     {
         private const string OpenXRLoaderTypeName = "UnityEngine.XR.OpenXR.OpenXRLoader";
+
+        static CriticalVRProjectBootstrap() => ConfigureLocalAndroidTools();
 
         [MenuItem("CriticalVR/Bootstrap/Run Full Quest Bootstrap")]
         public static void RunFullBootstrap()
         {
             EnsureQuestProjectScaffold();
-            Debug.Log("Critical-VR bootstrap completed. Run validation next, then import Meta XR packages and replace the preview rig with OVRCameraRig.");
+            Debug.Log("Critical-VR production Quest scene configured. Run validation, then build and test on the headset.");
         }
 
         public static void RunFromBatchMode()
@@ -36,21 +39,39 @@ namespace CriticalVR.EditorTools
         [MenuItem("CriticalVR/Bootstrap/Configure Android Quest Settings")]
         public static void ConfigureProjectSettings()
         {
+            ConfigureLocalAndroidTools();
             EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
 
             PlayerSettings.companyName = "qyam23";
             PlayerSettings.productName = "Critical-VR";
-            PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.qyam23.criticalvr");
+            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, "com.qyam23.criticalvr");
             PlayerSettings.bundleVersion = "0.1.0";
+            PlayerSettings.SplashScreen.show = false;
             PlayerSettings.colorSpace = ColorSpace.Linear;
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
             PlayerSettings.runInBackground = false;
-            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel29;
+            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel32;
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-            PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
-            PlayerSettings.SetApiCompatibilityLevel(BuildTargetGroup.Android, ApiCompatibilityLevel.NET_Standard);
+            PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
+            PlayerSettings.SetApiCompatibilityLevel(NamedBuildTarget.Android, ApiCompatibilityLevel.NET_Standard);
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan, GraphicsDeviceType.OpenGLES3 });
+        }
+
+        private static void ConfigureLocalAndroidTools()
+        {
+            string toolchain = Environment.GetEnvironmentVariable("CRITICAL_VR_ANDROID_TOOLS");
+            if (string.IsNullOrEmpty(toolchain))
+            {
+                string localConfig = Path.Combine("UserSettings", "CriticalVRAndroidToolchain.txt");
+                if (File.Exists(localConfig)) toolchain = File.ReadAllText(localConfig).Trim();
+            }
+            if (!string.IsNullOrEmpty(toolchain))
+            {
+                UnityEditor.Android.AndroidExternalToolsSettings.sdkRootPath = Path.Combine(toolchain, "SDK");
+                UnityEditor.Android.AndroidExternalToolsSettings.ndkRootPath = Path.Combine(toolchain, "NDK");
+                UnityEditor.Android.AndroidExternalToolsSettings.jdkRootPath = Path.Combine(toolchain, "OpenJDK");
+            }
         }
 
         [MenuItem("CriticalVR/Bootstrap/Create Or Repair Quest Assets")]
@@ -72,6 +93,8 @@ namespace CriticalVR.EditorTools
 
         internal static void EnsureQuestProjectScaffold()
         {
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+                throw new BuildFailedException("Quest setup canceled; current scene was not changed.");
             ConfigureProjectSettings();
             EnsureFolders();
 
@@ -79,6 +102,7 @@ namespace CriticalVR.EditorTools
             CreateOrRepairRenderPipelineAssets(material);
             EnsureXRSettings();
             CreateSceneAsset(material, recreateScene: false);
+            CriticalVRMetaSetup.ConfigureSceneAndManifest(material);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -161,6 +185,7 @@ namespace CriticalVR.EditorTools
             EditorUtility.SetDirty(rendererData);
             EditorUtility.SetDirty(pipelineAsset);
             GraphicsSettings.defaultRenderPipeline = pipelineAsset;
+            QualitySettings.renderPipeline = pipelineAsset;
         }
 
         private static void EnsureRendererFeature(UniversalRendererData rendererData, Material material)
@@ -186,7 +211,7 @@ namespace CriticalVR.EditorTools
             SerializedObject featureSerializedObject = new SerializedObject(feature);
             SerializedProperty settingsProperty = featureSerializedObject.FindProperty("settings");
             settingsProperty.FindPropertyRelative("material").objectReferenceValue = material;
-            settingsProperty.FindPropertyRelative("injectionPoint").enumValueIndex = (int)RenderPassEvent.AfterRenderingTransparents;
+            settingsProperty.FindPropertyRelative("injectionPoint").intValue = (int)RenderPassEvent.AfterRenderingTransparents;
             featureSerializedObject.ApplyModifiedPropertiesWithoutUndo();
 
             MethodInfo validateMethod = typeof(ScriptableRendererData).GetMethod("ValidateRendererFeatures", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -244,6 +269,10 @@ namespace CriticalVR.EditorTools
 
         private static void CreateSceneAsset(Material material, bool recreateScene)
         {
+            // Upgrade a copy; keep the user's original bootstrap scene intact.
+            if (!File.Exists(CriticalVRProjectPaths.ToAbsolutePath(CriticalVRProjectPaths.ScenePath)) &&
+                File.Exists(CriticalVRProjectPaths.ToAbsolutePath(CriticalVRProjectPaths.OriginalScenePath)))
+                AssetDatabase.CopyAsset(CriticalVRProjectPaths.OriginalScenePath, CriticalVRProjectPaths.ScenePath);
             if (recreateScene || !File.Exists(CriticalVRProjectPaths.ToAbsolutePath(CriticalVRProjectPaths.ScenePath)))
             {
                 CreateNewScene(material);
@@ -337,24 +366,9 @@ namespace CriticalVR.EditorTools
 
         private static void EnsurePreviewOverlay(Camera mainCamera, Material material)
         {
+            // A fullscreen-triangle blit shader cannot also render on a mesh quad.
             GameObject previewQuad = GameObject.Find("CriticalVRPreviewOverlay");
-            if (previewQuad == null)
-            {
-                previewQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                previewQuad.name = "CriticalVRPreviewOverlay";
-            }
-
-            previewQuad.transform.SetParent(mainCamera.transform, false);
-            previewQuad.transform.localPosition = new Vector3(0f, 0f, 0.75f);
-            previewQuad.transform.localScale = new Vector3(1.6f, 0.9f, 1f);
-
-            MeshRenderer meshRenderer = previewQuad.GetComponent<MeshRenderer>();
-            if (meshRenderer != null)
-            {
-                meshRenderer.sharedMaterial = material;
-                meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
-                meshRenderer.receiveShadows = false;
-            }
+            if (previewQuad != null) UnityEngine.Object.DestroyImmediate(previewQuad);
         }
 
         private static void AssignManagerReferences(MotionToExperienceManager manager, Transform centerEyeAnchor, Material material)
